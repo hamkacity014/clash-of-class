@@ -114,9 +114,15 @@ export function subscribeToRoomEvents(
 // LOCAL STATE STORAGE ENGINE
 // -------------------------------------------------------------
 class LocalStore {
+  private memoryFallback: Map<string, string> = new Map();
+
   private get<T>(key: string, defaultVal: T): T {
-    if (typeof window === 'undefined') return defaultVal;
-    const item = localStorage.getItem(STORAGE_PREFIX + key);
+    let item: string | null = null;
+    if (typeof window === 'undefined') {
+      item = this.memoryFallback.get(STORAGE_PREFIX + key) || null;
+    } else {
+      item = localStorage.getItem(STORAGE_PREFIX + key);
+    }
     if (!item) return defaultVal;
     try {
       return JSON.parse(item);
@@ -126,8 +132,12 @@ class LocalStore {
   }
 
   private set<T>(key: string, value: T): void {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
+    const valStr = JSON.stringify(value);
+    if (typeof window === 'undefined') {
+      this.memoryFallback.set(STORAGE_PREFIX + key, valStr);
+    } else {
+      localStorage.setItem(STORAGE_PREFIX + key, valStr);
+    }
   }
 
   saveRoom(room: Room): void {
@@ -240,6 +250,56 @@ const localStore = new LocalStore();
 // PUBLIC METHODS
 // -------------------------------------------------------------
 
+// Helper aman untuk insert questions ke Supabase dengan fallback jika kolom explanation belum dibuat
+async function insertQuestionsToSupabase(qList: Question[]) {
+  if (!isSupabaseConfigured || !supabase || qList.length === 0) return;
+  try {
+    const qRes = await supabase.from('questions').insert(qList);
+    if (qRes.error) {
+      if (qRes.error.message.includes('explanation')) {
+        // Kolom explanation belum ada di schema Supabase, strip field explanation dan insert ulang
+        const stripped = qList.map(({ explanation: _exp, ...rest }) => rest);
+        const retryRes = await supabase.from('questions').insert(stripped);
+        if (retryRes.error) console.warn('Supabase retry questions insert warning:', retryRes.error.message);
+      } else if (qRes.error.code === '22001' || qRes.error.message.includes('varying(10)')) {
+        // Jika kolom correct_answer masih VARCHAR(10) di Supabase, truncate untuk database insert agar tidak crash
+        const truncated = qList.map((q) => ({
+          ...q,
+          correct_answer: q.correct_answer.slice(0, 10),
+        }));
+        const retryRes = await supabase.from('questions').insert(truncated);
+        if (retryRes.error) console.warn('Supabase retry questions insert warning:', retryRes.error.message);
+      } else {
+        console.warn('Supabase insert questions warning:', qRes.error.message);
+      }
+    }
+  } catch (err) {
+    console.warn('Supabase insertQuestionsToSupabase exception:', err);
+  }
+}
+
+// Helper aman untuk insert participants ke Supabase dengan fallback jika kolom team_name belum dibuat
+async function insertParticipantsToSupabase(pList: Participant | Participant[]) {
+  if (!isSupabaseConfigured || !supabase) return;
+  const list = Array.isArray(pList) ? pList : [pList];
+  if (list.length === 0) return;
+  try {
+    const pRes = await supabase.from('participants').insert(list);
+    if (pRes.error) {
+      if (pRes.error.message.includes('team_name')) {
+        // Kolom team_name belum ada di Supabase, strip field team_name dan insert ulang
+        const stripped = list.map(({ team_name: _t, ...rest }) => rest);
+        const retryRes = await supabase.from('participants').insert(stripped);
+        if (retryRes.error) console.warn('Supabase retry participant insert warning:', retryRes.error.message);
+      } else {
+        console.warn('Supabase insert participant warning:', pRes.error.message);
+      }
+    }
+  } catch (err) {
+    console.warn('Supabase insertParticipantsToSupabase exception:', err);
+  }
+}
+
 export async function createRoom(data: {
   teacher_name: string;
   title: string;
@@ -301,10 +361,18 @@ export async function createRoom(data: {
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('rooms').insert([newRoom]);
-      if (teamList.length > 0) await supabase.from('teams').insert(teamList);
-      if (questions.length > 0) await supabase.from('questions').insert(questions);
-    } catch {}
+      const rRes = await supabase.from('rooms').insert([newRoom]);
+      if (rRes.error) console.error('⚠️ Supabase insert rooms failed:', rRes.error.message);
+      if (teamList.length > 0) {
+        const tRes = await supabase.from('teams').insert(teamList);
+        if (tRes.error) console.error('⚠️ Supabase insert teams failed:', tRes.error.message);
+      }
+      if (questions.length > 0) {
+        await insertQuestionsToSupabase(questions);
+      }
+    } catch (err) {
+      console.error('⚠️ Supabase exception in createRoom:', err);
+    }
   }
 
   localStore.saveRoom(newRoom);
@@ -316,26 +384,58 @@ export async function createRoom(data: {
 
 export async function getRoomByCode(code: string): Promise<Room | null> {
   const normalized = code.trim().toUpperCase();
+  const localRoom = localStore.getRoom(normalized);
+
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data } = await supabase.from('rooms').select('*').eq('code', normalized).single();
-      if (data) return data as Room;
-    } catch {}
+      const { data } = await supabase.from('rooms').select('*').eq('code', normalized).maybeSingle();
+      if (data) {
+        localStore.saveRoom(data as Room);
+        return data as Room;
+      }
+
+      // Auto-recovery: Room ada di localStore tapi belum masuk Supabase
+      if (localRoom) {
+        await supabase.from('rooms').insert([localRoom]);
+        const localTeams = localStore.getTeams(localRoom.id);
+        if (localTeams.length > 0) {
+          await supabase.from('teams').insert(localTeams);
+        }
+        const localQuestions = localStore.getQuestions(localRoom.id);
+        if (localQuestions.length > 0) {
+          await insertQuestionsToSupabase(localQuestions);
+        }
+        return localRoom;
+      }
+    } catch (err) {
+      console.warn('Supabase getRoomByCode error:', err);
+    }
   }
-  return localStore.getRoom(normalized);
+  return localRoom;
 }
 
 export async function getTeamsByRoomId(roomId: string): Promise<Team[]> {
+  const localTeams = localStore.getTeams(roomId);
   if (isSupabaseConfigured && supabase) {
     try {
       const { data } = await supabase.from('teams').select('*').eq('room_id', roomId);
       if (data && data.length > 0) return data as Team[];
+
+      // Auto-sync jika di Supabase belum ada
+      if (localTeams.length > 0) {
+        const { data: rCheck } = await supabase.from('rooms').select('id').eq('id', roomId).maybeSingle();
+        if (rCheck) {
+          await supabase.from('teams').insert(localTeams);
+        }
+        return localTeams;
+      }
     } catch {}
   }
-  return localStore.getTeams(roomId);
+  return localTeams;
 }
 
 export async function getParticipantsByRoomId(roomId: string): Promise<Participant[]> {
+  const localPts = localStore.getParticipants(roomId);
   if (isSupabaseConfigured && supabase) {
     try {
       const { data } = await supabase
@@ -343,14 +443,50 @@ export async function getParticipantsByRoomId(roomId: string): Promise<Participa
         .select('*')
         .eq('room_id', roomId)
         .order('score', { ascending: false });
+
+      if (data && data.length > 0) {
+        // Lengkapi team_name jika kolom team_name belum ada di database
+        const teamList = await getTeamsByRoomId(roomId);
+        const teamMap = new Map(teamList.map((t) => [t.id, t.team_name]));
+
+        const mappedData: Participant[] = (data as Participant[]).map((p) => ({
+          ...p,
+          team_name: p.team_name || (p.team_id ? teamMap.get(p.team_id) || null : null),
+        }));
+
+        // Gabungkan jika ada peserta lokal yang belum sempat tersinkron
+        const ids = new Set(mappedData.map((p) => p.id));
+        const combined = [...mappedData];
+        const missingLocals: Participant[] = [];
+        for (const lp of localPts) {
+          if (!ids.has(lp.id)) {
+            combined.push(lp);
+            missingLocals.push(lp);
+          }
+        }
+        if (missingLocals.length > 0) {
+          await insertParticipantsToSupabase(missingLocals);
+        }
+        return combined.sort((a, b) => (b.score || 0) - (a.score || 0));
+      }
+
+      // Jika di Supabase kosong tapi lokal ada data
+      if (localPts.length > 0) {
+        const { data: rCheck } = await supabase.from('rooms').select('id').eq('id', roomId).maybeSingle();
+        if (rCheck) {
+          await insertParticipantsToSupabase(localPts);
+        }
+        return localPts.sort((a, b) => (b.score || 0) - (a.score || 0));
+      }
+
       if (data) return data as Participant[];
     } catch {}
   }
-  const pts = localStore.getParticipants(roomId);
-  return pts.sort((a, b) => (b.score || 0) - (a.score || 0));
+  return localPts.sort((a, b) => (b.score || 0) - (a.score || 0));
 }
 
 export async function getQuestionsByRoomId(roomId: string): Promise<Question[]> {
+  const localQuestions = localStore.getQuestions(roomId);
   if (isSupabaseConfigured && supabase) {
     try {
       const { data } = await supabase
@@ -358,10 +494,19 @@ export async function getQuestionsByRoomId(roomId: string): Promise<Question[]> 
         .select('*')
         .eq('room_id', roomId)
         .order('order_index', { ascending: true });
-      if (data) return data as Question[];
+      if (data && data.length > 0) return data as Question[];
+
+      // Auto-sync soal jika di Supabase belum ada
+      if (localQuestions.length > 0) {
+        const { data: rCheck } = await supabase.from('rooms').select('id').eq('id', roomId).maybeSingle();
+        if (rCheck) {
+          await insertQuestionsToSupabase(localQuestions);
+        }
+        return localQuestions;
+      }
     } catch {}
   }
-  return localStore.getQuestions(roomId);
+  return localQuestions;
 }
 
 export async function joinRoom(params: {
@@ -383,8 +528,23 @@ export async function joinRoom(params: {
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('participants').insert([participant]);
-    } catch {}
+      // Pastikan room sudah ada di Supabase terlebih dahulu agar foreign key constraint tidak gagal
+      const { data: rCheck } = await supabase.from('rooms').select('id').eq('id', params.room_id).maybeSingle();
+      if (!rCheck) {
+        const localRoom = localStore.getRoomById(params.room_id);
+        if (localRoom) {
+          await supabase.from('rooms').insert([localRoom]);
+          const localTeams = localStore.getTeams(localRoom.id);
+          if (localTeams.length > 0) await supabase.from('teams').insert(localTeams);
+          const localQ = localStore.getQuestions(localRoom.id);
+          if (localQ.length > 0) await insertQuestionsToSupabase(localQ);
+        }
+      }
+
+      await insertParticipantsToSupabase(participant);
+    } catch (err) {
+      console.warn('Supabase joinRoom error:', err);
+    }
   }
 
   localStore.addParticipant(participant);
@@ -418,7 +578,16 @@ export async function getParticipantById(roomId: string, participantId: string):
 // -------------------------------------------------------------
 
 export async function startGame(roomId: string): Promise<RoomQuestion[]> {
-  const room = localStore.getRoomById(roomId);
+  let room = localStore.getRoomById(roomId);
+  if (!room && isSupabaseConfigured && supabase) {
+    try {
+      const { data } = await supabase.from('rooms').select('*').eq('id', roomId).maybeSingle();
+      if (data) {
+        room = data as Room;
+        localStore.saveRoom(room);
+      }
+    } catch {}
+  }
   if (!room) throw new Error('Room tidak ditemukan');
 
   room.status = 'ACTIVE';
@@ -463,6 +632,57 @@ export async function startGame(roomId: string): Promise<RoomQuestion[]> {
   return rqList;
 }
 
+export async function finishGame(roomId: string): Promise<Room | null> {
+  const room = localStore.getRoomById(roomId);
+  if (!room) return null;
+
+  room.status = 'FINISHED';
+  localStore.saveRoom(room);
+
+  // Bersihkan pertanyaan yang masih dalam status locked
+  const rqList = localStore.getRoomQuestions(roomId);
+  let hasLocked = false;
+  rqList.forEach((rq) => {
+    if (rq.status === 'LOCKED') {
+      rq.status = 'AVAILABLE';
+      rq.locked_by_participant_id = null;
+      rq.locked_by_team_id = null;
+      rq.locked_by_name = null;
+      rq.locked_at = null;
+      rq.lock_expires_at = null;
+      hasLocked = true;
+    }
+  });
+  if (hasLocked) {
+    localStore.saveRoomQuestions(roomId, rqList);
+  }
+
+  // Update Supabase jika aktif
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await supabase.from('rooms').update({ status: 'FINISHED' }).eq('id', roomId);
+    } catch {}
+  }
+
+  // Tambah activity log
+  localStore.addActivityLog(roomId, {
+    id: generateUUID(),
+    text: `Pertandingan resmi diakhiri oleh ${room.teacher_name}!`,
+    type: 'info',
+    timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+  });
+
+  // Broadcast event GAME_FINISHED ke semua tab siswa secara instan
+  broadcastRoomEvent({
+    event: 'GAME_FINISHED',
+    room_code: room.code,
+    room_id: room.id,
+    timestamp: new Date().toISOString(),
+  });
+
+  return room;
+}
+
 export async function getRoomQuestions(roomId: string): Promise<RoomQuestion[]> {
   const rqList = localStore.getRoomQuestions(roomId);
   const now = Date.now();
@@ -475,6 +695,10 @@ export async function getRoomQuestions(roomId: string): Promise<RoomQuestion[]> 
       if (exp <= now) {
         // Otomatis bebaskan soal (Steal Window terbuka)
         const oldLocker = rq.locked_by_name;
+        const oldPid = rq.locked_by_participant_id;
+        if (oldPid) {
+          localStore.setCooldown(`${oldPid}_${rq.id}`, Date.now() + 20000);
+        }
         rq.status = 'AVAILABLE';
         rq.locked_by_participant_id = null;
         rq.locked_by_team_id = null;
@@ -511,22 +735,45 @@ export async function getRoomQuestions(roomId: string): Promise<RoomQuestion[]> 
   return rqList;
 }
 
+// Mutex queue per room to serialize lock attempts and eliminate race conditions (Fase 4 SRS)
+const roomLockMutexes = new Map<string, Promise<unknown>>();
+
+async function withRoomLock<T>(roomId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = roomLockMutexes.get(roomId) || Promise.resolve();
+  let release: () => void;
+  const next = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  roomLockMutexes.set(roomId, next);
+
+  try {
+    await prev;
+    return await fn();
+  } finally {
+    release!();
+    if (roomLockMutexes.get(roomId) === next) {
+      roomLockMutexes.delete(roomId);
+    }
+  }
+}
+
 export async function attemptLockQuestion(
   roomQuestionId: string,
   participant: Participant,
   durationSeconds = 60
 ): Promise<LockResult> {
-  const roomId = participant.room_id;
-  const room = localStore.getRoomById(roomId);
-  if (!room) return { status: 'ERROR', message: 'Room tidak valid.' };
+  return withRoomLock(participant.room_id, async () => {
+    const roomId = participant.room_id;
+    const room = localStore.getRoomById(roomId);
+    if (!room) return { status: 'ERROR', message: 'Room tidak valid.' };
 
-  // Pastikan expired lock dibersihkan dulu
-  const rqList = await getRoomQuestions(roomId);
-  const targetRq = rqList.find((rq) => rq.id === roomQuestionId);
+    // Pastikan expired lock dibersihkan dulu
+    const rqList = await getRoomQuestions(roomId);
+    const targetRq = rqList.find((rq) => rq.id === roomQuestionId);
 
-  if (!targetRq) {
-    return { status: 'ERROR', message: 'Soal tidak ditemukan.' };
-  }
+    if (!targetRq) {
+      return { status: 'ERROR', message: 'Soal tidak ditemukan.' };
+    }
 
   // 1. Cek apakah sudah diselesaikan
   if (targetRq.status === 'SOLVED') {
@@ -615,18 +862,19 @@ export async function attemptLockQuestion(
     },
   });
 
-  return {
-    status: 'SUCCESS',
-    message: 'Berhasil mengunci soal! Kerjakan dalam waktu 60 detik.',
-    expires_at: expiresAt,
-  };
+    return {
+      status: 'SUCCESS',
+      message: 'Berhasil mengunci soal! Kerjakan dalam waktu 60 detik.',
+      expires_at: expiresAt,
+    };
+  });
 }
 
 export async function submitAnswer(
   roomQuestionId: string,
   participant: Participant,
-  selectedAnswer: 'A' | 'B' | 'C' | 'D'
-): Promise<{ correct: boolean; pointsAwarded: number; correctAnswer: string }> {
+  selectedAnswer: string
+): Promise<{ correct: boolean; pointsAwarded: number; correctAnswer?: string }> {
   const roomId = participant.room_id;
   const room = localStore.getRoomById(roomId);
   const rqList = await getRoomQuestions(roomId);
@@ -636,7 +884,21 @@ export async function submitAnswer(
     throw new Error('Soal tidak valid.');
   }
 
-  const isCorrect = selectedAnswer === targetRq.question.correct_answer;
+  // Cek apakah tipe soal Essay atau Pilihan Ganda
+  const isEssay = targetRq.question.type === 'ESSAY' || !targetRq.question.options || targetRq.question.options.length === 0;
+
+  let isCorrect = false;
+  if (isEssay) {
+    // Evaluasi Essay: case-insensitive, trimmed, dan mendukung multi-sinonim dipisah ';'
+    const studentAns = selectedAnswer.trim().toLowerCase();
+    const acceptedAnswers = targetRq.question.correct_answer
+      .split(';')
+      .map((a) => a.trim().toLowerCase())
+      .filter(Boolean);
+    isCorrect = acceptedAnswers.some((ans) => ans === studentAns);
+  } else {
+    isCorrect = selectedAnswer.trim().toUpperCase() === targetRq.question.correct_answer.trim().toUpperCase();
+  }
   const points = targetRq.question.points || 100;
   const displayName = room?.mode === 'TEAM' && participant.team_name ? participant.team_name : participant.name;
 
@@ -681,7 +943,7 @@ export async function submitAnswer(
 
     return { correct: true, pointsAwarded: points, correctAnswer: targetRq.question.correct_answer };
   } else {
-    // JAWABAN SALAH! Lepas lock dan berikan cooldown 15 detik bagi siswa ini
+    // JAWABAN SALAH! Lepas lock dan berikan cooldown 20 detik bagi siswa ini (PRD Fase 4)
     targetRq.status = 'AVAILABLE';
     targetRq.locked_by_participant_id = null;
     targetRq.locked_by_team_id = null;
@@ -689,8 +951,8 @@ export async function submitAnswer(
     targetRq.locked_at = null;
     targetRq.lock_expires_at = null;
 
-    // Cooldown 15 detik
-    localStore.setCooldown(`${participant.id}_${roomQuestionId}`, Date.now() + 15000);
+    // Cooldown 20 detik anti-trolling
+    localStore.setCooldown(`${participant.id}_${roomQuestionId}`, Date.now() + 20000);
     localStore.saveRoomQuestions(roomId, rqList);
 
     localStore.addActivityLog(roomId, {
@@ -706,11 +968,72 @@ export async function submitAnswer(
         room_code: room.code,
         room_id: roomId,
         timestamp: new Date().toISOString(),
-        data: { roomQuestionId },
+        data: { 
+          roomQuestionId,
+          reason: 'WRONG_ANSWER',
+          message: `${displayName} menjawab salah. Soal kembali terbuka!`
+        },
       });
     }
 
-    return { correct: false, pointsAwarded: 0, correctAnswer: targetRq.question.correct_answer };
+    return { correct: false, pointsAwarded: 0 };
+  }
+}
+
+export function getRemainingCooldown(participantId: string, roomQuestionId: string): number {
+  const cdKey = `${participantId}_${roomQuestionId}`;
+  const cdExp = localStore.getCooldown(cdKey);
+  const diff = cdExp - Date.now();
+  return diff > 0 ? Math.ceil(diff / 1000) : 0;
+}
+
+export async function handleQuestionTimeout(roomQuestionId: string, participant: Participant): Promise<void> {
+  const roomId = participant.room_id;
+  const room = localStore.getRoomById(roomId);
+  const rqList = localStore.getRoomQuestions(roomId);
+  const targetRq = rqList.find((rq) => rq.id === roomQuestionId);
+
+  if (!targetRq) return;
+
+  const isOwner =
+    targetRq.locked_by_participant_id === participant.id ||
+    (room?.mode === 'TEAM' && targetRq.locked_by_team_id && targetRq.locked_by_team_id === participant.team_id);
+
+  if (targetRq.status === 'LOCKED' && isOwner) {
+    const displayName = room?.mode === 'TEAM' && participant.team_name ? participant.team_name : participant.name;
+    const orderIndex = targetRq.question?.order_index || '';
+
+    targetRq.status = 'AVAILABLE';
+    targetRq.locked_by_participant_id = null;
+    targetRq.locked_by_team_id = null;
+    targetRq.locked_by_name = null;
+    targetRq.locked_at = null;
+    targetRq.lock_expires_at = null;
+
+    // Cooldown 20 detik anti-trolling
+    localStore.setCooldown(`${participant.id}_${roomQuestionId}`, Date.now() + 20000);
+    localStore.saveRoomQuestions(roomId, rqList);
+
+    localStore.addActivityLog(roomId, {
+      id: generateUUID(),
+      text: `Waktu habis! Soal #${orderIndex} lepas dari ${displayName} dan kembali terbuka.`,
+      type: 'release',
+      timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    });
+
+    if (room) {
+      broadcastRoomEvent({
+        event: 'QUESTION_RELEASED',
+        room_code: room.code,
+        room_id: roomId,
+        timestamp: new Date().toISOString(),
+        data: { 
+          roomQuestionId,
+          reason: 'TIMEOUT',
+          message: 'Waktu pengerjaan habis! Soal kembali terbuka.'
+        },
+      });
+    }
   }
 }
 
@@ -841,19 +1164,27 @@ export function parseQuestionsFromJSON(
     const qList = Array.isArray(parsed) ? parsed : parsed.questions;
     if (!Array.isArray(qList)) throw new Error('Format JSON tidak memiliki array questions.');
 
-    return qList.map((item, idx) => ({
-      question_text: String(item.question_text || `Pertanyaan #${idx + 1}`),
-      options: item.options && item.options.length === 4 ? item.options : [
-        { label: 'A', text: item.options?.[0]?.text || 'Pilihan A' },
-        { label: 'B', text: item.options?.[1]?.text || 'Pilihan B' },
-        { label: 'C', text: item.options?.[2]?.text || 'Pilihan C' },
-        { label: 'D', text: item.options?.[3]?.text || 'Pilihan D' },
-      ],
-      correct_answer: (['A', 'B', 'C', 'D'].includes(item.correct_answer) ? item.correct_answer : 'A') as 'A' | 'B' | 'C' | 'D',
-      points: Number(item.points) || 100,
-      order_index: idx + 1,
-      explanation: item.explanation ? String(item.explanation) : undefined,
-    }));
+    return qList.map((item, idx) => {
+      const isEssay = item.type === 'ESSAY' || (!item.options || item.options.length === 0);
+      return {
+        type: (isEssay ? 'ESSAY' : 'MULTIPLE_CHOICE') as 'ESSAY' | 'MULTIPLE_CHOICE',
+        question_text: String(item.question_text || `Pertanyaan #${idx + 1}`),
+        options: isEssay
+          ? []
+          : (item.options && item.options.length === 4 ? item.options : [
+              { label: 'A', text: item.options?.[0]?.text || 'Pilihan A' },
+              { label: 'B', text: item.options?.[1]?.text || 'Pilihan B' },
+              { label: 'C', text: item.options?.[2]?.text || 'Pilihan C' },
+              { label: 'D', text: item.options?.[3]?.text || 'Pilihan D' },
+            ]),
+        correct_answer: isEssay 
+          ? String(item.correct_answer || '').trim() 
+          : (['A', 'B', 'C', 'D'].includes(item.correct_answer) ? item.correct_answer : 'A'),
+        points: Number(item.points) || 100,
+        order_index: idx + 1,
+        explanation: item.explanation ? String(item.explanation) : undefined,
+      };
+    });
   } catch (err) {
     throw new Error('File JSON tidak valid atau format tidak sesuai: ' + (err as Error).message);
   }

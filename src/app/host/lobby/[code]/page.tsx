@@ -8,7 +8,8 @@ import {
   getParticipantsByRoomId, 
   getTeamsByRoomId, 
   getQuestionsByRoomId,
-  startGame
+  startGame,
+  subscribeToRoomEvents
 } from '@/lib/store';
 import { Room, Participant, Team, Question } from '@/types';
 import { soundFx } from '@/lib/sound';
@@ -23,7 +24,8 @@ import {
   RefreshCw, 
   HelpCircle,
   Clock,
-  Shield
+  Shield,
+  ArrowLeft
 } from 'lucide-react';
 
 export default function HostLobbyPage() {
@@ -56,12 +58,25 @@ export default function HostLobbyPage() {
 
   useEffect(() => {
     loadData();
-    // Polling interval 2 detik agar siswa baru langsung terdeteksi
+
+    // Dengar event real-time saat ada siswa baru masuk
+    const unsubscribe = subscribeToRoomEvents(code, (payload) => {
+      if (payload.event === 'PARTICIPANT_JOINED') {
+        soundFx.playJoin();
+        loadData();
+      }
+    });
+
+    // Polling interval 1.5 detik agar status dan siswa baru selalu terdeteksi
     const interval = setInterval(() => {
       loadData();
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [loadData]);
+    }, 1500);
+
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
+  }, [code, loadData]);
 
   const handleCopyLink = () => {
     const url = `${window.location.origin}/?pin=${code}`;
@@ -108,6 +123,22 @@ export default function HostLobbyPage() {
       <Navbar />
 
       <main className="flex-1 max-w-7xl mx-auto px-4 py-8 sm:py-10 w-full flex flex-col justify-between">
+        {/* Tombol Navigasi Kembali */}
+        <div className="mb-5">
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm('Batal sesi kuis ini dan kembali ke pengaturan room?')) {
+                router.push('/host');
+              }
+            }}
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-semibold text-slate-400 hover:text-white transition-all shadow-sm group"
+          >
+            <ArrowLeft className="w-4 h-4 text-amber-400 group-hover:-translate-x-1 transition-transform" />
+            <span>Batal & Kembali ke Buat Sesi</span>
+          </button>
+        </div>
+
         {/* Top Header Card */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 sm:p-8 backdrop-blur-xl mb-8 relative overflow-hidden shadow-2xl">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 via-cyan-400 to-amber-400"></div>
@@ -175,10 +206,24 @@ export default function HostLobbyPage() {
                 {participants.length} Siswa Terhubung
               </span>
             </div>
-            <span className="text-xs text-slate-500 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              Live Sync
-            </span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  loadData();
+                  soundFx.playClick();
+                }}
+                className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 hover:border-cyan-400 text-xs text-slate-300 hover:text-white flex items-center gap-1.5 transition-all active:scale-95"
+                title="Segarkan data peserta"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Segarkan</span>
+              </button>
+              <span className="text-xs text-slate-500 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                Live Sync
+              </span>
+            </div>
           </div>
 
           {participants.length === 0 ? (
@@ -259,14 +304,29 @@ export default function HostLobbyPage() {
             <span>Pastikan seluruh siswa sudah masuk ke kelompok masing-masing sebelum memulai.</span>
           </div>
 
-          <button
-            onClick={handleStartGame}
-            disabled={participants.length === 0}
-            className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <Play className="w-4 h-4 fill-slate-950" />
-            <span>MULAI PERTANDINGAN SEKARANG</span>
-          </button>
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm('Batal sesi kuis ini dan kembali ke pengaturan room?')) {
+                  router.push('/host');
+                }
+              }}
+              className="px-5 py-3.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5 transition-all"
+            >
+              <ArrowLeft className="w-4 h-4 text-slate-400" />
+              <span>Batal</span>
+            </button>
+
+            <button
+              onClick={handleStartGame}
+              disabled={participants.length === 0}
+              className="flex-1 sm:flex-initial px-8 py-3.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Play className="w-4 h-4 fill-slate-950" />
+              <span>MULAI PERTANDINGAN SEKARANG</span>
+            </button>
+          </div>
         </div>
       </main>
     </div>

@@ -14,10 +14,11 @@ import {
   Lock, 
   CheckCircle2, 
   AlertCircle,
-  Radio
+  Radio,
+  ArrowLeft
 } from 'lucide-react';
 
-export default function StudentLobbyPage() {
+function StudentLobbyContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -36,7 +37,11 @@ export default function StudentLobbyPage() {
     isRedirectingRef.current = true;
     soundFx.playSuccess();
     const dest = pId ? `/play/arena/${code}?pid=${pId}` : `/play/arena/${code}`;
-    router.replace(dest);
+    if (typeof window !== 'undefined') {
+      window.location.href = dest;
+    } else {
+      router.replace(dest);
+    }
   }, [code, router]);
 
   const loadLobby = useCallback(async () => {
@@ -110,14 +115,46 @@ export default function StudentLobbyPage() {
     };
   }, [code, loadLobby, navigateToArena, pid]);
 
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoadFailed(true);
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, []);
+
   if (!room) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-        <Navbar />
+        <Navbar hideHostBtn={true} />
         <div className="flex-1 flex items-center justify-center p-4">
-          <div className="text-center space-y-3">
-            <Radio className="w-8 h-8 text-cyan-400 animate-pulse mx-auto" />
-            <p className="text-slate-400 text-sm">Menghubungkan ke Room {code}...</p>
+          <div className="text-center space-y-4 max-w-sm">
+            {loadFailed ? (
+              <div className="space-y-4 animate-in fade-in">
+                <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Room Tidak Ditemukan</h3>
+                  <p className="text-slate-400 text-xs mt-1 leading-relaxed">
+                    Room dengan PIN <strong className="text-amber-400">{code}</strong> belum ada di database Supabase atau sesi telah berakhir.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push('/')}
+                  className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all"
+                >
+                  Kembali ke Beranda
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <Radio className="w-8 h-8 text-cyan-400 animate-pulse mx-auto" />
+                <p className="text-slate-400 text-sm">Menghubungkan ke Room {code}...</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -126,9 +163,28 @@ export default function StudentLobbyPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      <Navbar />
+      <Navbar hideHostBtn={true} />
 
       <main className="flex-1 max-w-4xl mx-auto px-4 py-8 sm:py-12 w-full flex flex-col items-center">
+        {/* Tombol Keluar / Ganti Room */}
+        <div className="w-full max-w-md flex justify-start mb-6">
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm('Keluar dari room ini dan kembali ke beranda?')) {
+                if (typeof window !== 'undefined' && room) {
+                  sessionStorage.removeItem('current_participant_' + room.id);
+                }
+                router.push('/');
+              }
+            }}
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-semibold text-slate-400 hover:text-white transition-all shadow-sm group"
+          >
+            <ArrowLeft className="w-4 h-4 text-cyan-400 group-hover:-translate-x-1 transition-transform" />
+            <span>Keluar / Ganti Room</span>
+          </button>
+        </div>
+
         {/* Radar Waiting Animation */}
         <div className="relative mb-6">
           <div className="w-24 h-24 rounded-full border-2 border-cyan-500/30 flex items-center justify-center relative">
@@ -243,5 +299,20 @@ export default function StudentLobbyPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function StudentLobbyPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4">
+          <div className="w-10 h-10 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mb-3" />
+          <p className="text-slate-400 text-sm font-medium">Menghubungkan ke Lobby...</p>
+        </div>
+      }
+    >
+      <StudentLobbyContent />
+    </React.Suspense>
   );
 }

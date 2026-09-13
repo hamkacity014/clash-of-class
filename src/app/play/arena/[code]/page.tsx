@@ -10,9 +10,12 @@ import {
   attemptLockQuestion, 
   submitAnswer, 
   subscribeToRoomEvents,
-  getParticipantsByRoomId
+  getParticipantsByRoomId,
+  getTeamsByRoomId,
+  getRemainingCooldown,
+  handleQuestionTimeout
 } from '@/lib/store';
-import { Room, Participant, RoomQuestion, RealtimeEventPayload } from '@/types';
+import { Room, Participant, Team, RoomQuestion, RealtimeEventPayload } from '@/types';
 import { soundFx } from '@/lib/sound';
 import { 
   Lock, 
@@ -26,10 +29,12 @@ import {
   ArrowRight,
   Shield,
   HelpCircle,
-  Radio
+  Radio,
+  Crown,
+  Home
 } from 'lucide-react';
 
-export default function StudentArenaPage() {
+function StudentArenaContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -38,15 +43,19 @@ export default function StudentArenaPage() {
 
   const [room, setRoom] = useState<Room | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [allParticipants, setAllParticipants] = useState<Participant[]>([]);
   const [roomQuestions, setRoomQuestions] = useState<RoomQuestion[]>([]);
   const [activeQuestion, setActiveQuestion] = useState<RoomQuestion | null>(null);
-  const [selectedOption, setSelectedOption] = useState<'A' | 'B' | 'C' | 'D' | null>(null);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(60);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [showResultModal, setShowResultModal] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasCelebratedRef = useRef(false);
 
   // Show Toast
   const showToast = (msg: string) => {
@@ -61,11 +70,19 @@ export default function StudentArenaPage() {
     if (!r) return;
     setRoom(r);
 
-    const [pts, rqList] = await Promise.all([
+    const [pts, rqList, tms] = await Promise.all([
       getParticipantsByRoomId(r.id),
       getRoomQuestions(r.id),
+      getTeamsByRoomId(r.id),
     ]);
     setRoomQuestions(rqList);
+    setAllParticipants(pts);
+    setTeams(tms);
+
+    if (r.status === 'FINISHED') {
+      setActiveQuestion(null);
+      setShowResultModal(true);
+    }
 
     // Ambil peserta saat ini: Prioritas 1: pid dari URL
     let currentP: Participant | null = null;
@@ -139,13 +156,16 @@ export default function StudentArenaPage() {
         soundFx.playTick();
       }
 
-      // Waktu habis!
+      // Waktu habis! (Fase 4 Anti-Troll Timeout Handler)
       if (diff <= 0) {
         if (timerRef.current) clearInterval(timerRef.current);
         soundFx.playLock();
+        if (participant && activeQuestion) {
+          handleQuestionTimeout(activeQuestion.id, participant);
+        }
         setActiveQuestion(null);
         setSelectedOption(null);
-        showToast('Waktu 60 detik habis! Soal lepas dan dapat direbut lawan.');
+        showToast('Waktu habis! Soal lepas dan kamu terkena penalti 20 detik.');
         loadArenaData();
       }
     };
@@ -166,7 +186,20 @@ export default function StudentArenaPage() {
       // Refresh board kapan saja ada aksi lock, release, atau solve
       loadArenaData();
 
-      if (payload.event === 'QUESTION_LOCKED') {
+      if (payload.event === 'GAME_FINISHED') {
+        setActiveQuestion(null);
+        setSelectedOption(null);
+        if (timerRef.current) clearInterval(timerRef.current);
+        soundFx.playSuccess();
+        confetti({
+          particleCount: 120,
+          spread: 90,
+          origin: { y: 0.5 },
+          colors: ['#F59E0B', '#06B6D4', '#10B981', '#ffffff'],
+        });
+        setShowResultModal(true);
+        loadArenaData();
+      } else if (payload.event === 'QUESTION_LOCKED') {
         const locker = (payload.data?.lockedByName as string) || 'Seseorang';
         showToast(`⚡ ${locker} baru saja mengunci salah satu soal!`);
       } else if (payload.event === 'QUESTION_RELEASED') {
@@ -188,9 +221,27 @@ export default function StudentArenaPage() {
     };
   }, [code, loadArenaData]);
 
+  // Efek selebrasi suara & confetti satu kali saat game selesai
+  useEffect(() => {
+    if (room?.status === 'FINISHED' && !hasCelebratedRef.current) {
+      hasCelebratedRef.current = true;
+      soundFx.playSuccess();
+      confetti({
+        particleCount: 120,
+        spread: 90,
+        origin: { y: 0.5 },
+        colors: ['#F59E0B', '#06B6D4', '#10B981', '#ffffff'],
+      });
+    }
+  }, [room?.status]);
+
   // Handler: Buka & Kunci Soal
   const handleLockQuestion = async (rq: RoomQuestion) => {
     if (!participant || !room) return;
+    if (room.status === 'FINISHED') {
+      showToast('⚠️ Pertandingan telah selesai.');
+      return;
+    }
     soundFx.playClick();
 
     const result = await attemptLockQuestion(rq.id, participant, room.lock_duration || 60);
@@ -211,8 +262,9 @@ export default function StudentArenaPage() {
 
   // Handler: Kirim Jawaban
   const handleSubmitAnswer = async () => {
-    if (!activeQuestion || !participant || !selectedOption) {
-      alert('Pilih salah satu jawaban terlebih dahulu!');
+    if (!activeQuestion || !participant || !selectedOption || !selectedOption.trim()) {
+      const isEssay = activeQuestion?.question?.type === 'ESSAY' || !activeQuestion?.question?.options || activeQuestion.question.options.length === 0;
+      alert(isEssay ? 'Tuliskan jawaban essay terlebih dahulu!' : 'Pilih salah satu jawaban terlebih dahulu!');
       return;
     }
 
@@ -240,25 +292,16 @@ export default function StudentArenaPage() {
           setParticipant({ ...participant, score: (participant.score || 0) + res.pointsAwarded });
         }
 
-        setTimeout(() => {
-          setActiveQuestion(null);
-          setSelectedOption(null);
-          setFeedback(null);
-          loadArenaData();
-        }, 3200);
+        // Sinkronisasi data latar belakang (modal tetap dibuka agar siswa leluasa membaca pembahasan)
+        loadArenaData();
       } else {
         soundFx.playLock();
-        setFeedback({
-          type: 'error',
-          message: `Jawaban Kurang Tepat! Kunci jawaban adalah (${res.correctAnswer}). Soal lepas ke peserta lain.`,
-        });
-
-        setTimeout(() => {
-          setActiveQuestion(null);
-          setSelectedOption(null);
-          setFeedback(null);
-          loadArenaData();
-        }, 3600);
+        // Jawaban salah: langsung tutup modal pengerjaan dan kembali ke bank soal arena tanpa membocorkan kunci jawaban
+        setActiveQuestion(null);
+        setSelectedOption(null);
+        setFeedback(null);
+        showToast('❌ Jawaban Kurang Tepat! Soal lepas dan dapat direbut lawan.');
+        loadArenaData();
       }
     } catch {
       alert('Gagal mengirim jawaban. Coba lagi.');
@@ -270,7 +313,7 @@ export default function StudentArenaPage() {
   if (!room) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-        <Navbar />
+        <Navbar hideHostBtn={true} />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-3">
             <Radio className="w-8 h-8 text-cyan-400 animate-pulse mx-auto" />
@@ -297,7 +340,7 @@ export default function StudentArenaPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col select-none">
-      <Navbar />
+      <Navbar hideHostBtn={true} />
 
       {/* Floating Toast Notification */}
       {toastMsg && (
@@ -310,6 +353,29 @@ export default function StudentArenaPage() {
       )}
 
       <main className="flex-1 max-w-7xl mx-auto px-4 py-6 sm:py-8 w-full">
+        {/* Banner Permainan Selesai (Jika Guru mengakhiri sesi) */}
+        {room.status === 'FINISHED' && (
+          <div className="bg-amber-500/15 border-2 border-amber-500/50 rounded-2xl p-4 sm:p-5 backdrop-blur-md mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg shadow-amber-500/10 animate-in fade-in">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                <Trophy className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white">Pertandingan Telah Selesai</h3>
+                <p className="text-xs text-amber-200/80">Guru telah mengakhiri sesi arena. Terima kasih atas usaha dan partisipasi terbaikmu!</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowResultModal(true)}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs shadow-md shadow-amber-500/20 active:scale-95 transition-all flex items-center gap-2 shrink-0"
+            >
+              <Trophy className="w-4 h-4" />
+              <span>Lihat Hasil & Peringkat</span>
+            </button>
+          </div>
+        )}
+
         {/* Top Battle HUD (Heads-Up Display) */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 backdrop-blur-md mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
           {/* Info Siswa */}
@@ -418,29 +484,53 @@ export default function StudentArenaPage() {
               cardSecondsLeft = Math.max(0, Math.ceil((new Date(rq.lock_expires_at).getTime() - Date.now()) / 1000));
             }
 
+            // Hitung cooldown penalti peserta (Anti-Troll Fase 4)
+            const myCooldown = (isAvailable && participant) ? getRemainingCooldown(participant.id, rq.id) : 0;
+            const isInCooldown = myCooldown > 0;
+
             return (
               <div
                 key={rq.id}
                 className={`relative rounded-2xl p-5 border transition-all duration-300 flex flex-col justify-between min-h-[160px] ${
                   isAvailable
-                    ? 'bg-slate-900/70 border-slate-700/80 hover:border-cyan-400 hover:shadow-lg hover:shadow-cyan-500/10 cursor-pointer group'
+                    ? room.status === 'FINISHED'
+                      ? 'bg-slate-900/40 border-slate-800 opacity-60'
+                      : isInCooldown
+                      ? 'bg-rose-950/20 border-rose-500/40 hover:border-rose-400 cursor-not-allowed shadow-sm'
+                      : 'bg-slate-900/70 border-slate-700/80 hover:border-cyan-400 hover:shadow-lg hover:shadow-cyan-500/10 cursor-pointer group'
                     : isLocked
                     ? 'bg-amber-950/20 border-amber-500/50 animate-cyber-pulse'
                     : 'bg-emerald-950/20 border-emerald-500/40 opacity-90'
                 }`}
                 onClick={() => {
-                  if (isAvailable) handleLockQuestion(rq);
+                  if (isAvailable && room.status !== 'FINISHED') {
+                    if (isInCooldown) {
+                      soundFx.playLock();
+                      showToast(`⚠️ Kamu dalam masa penalti untuk soal ini. Tunggu ${myCooldown} detik lagi!`);
+                    } else {
+                      handleLockQuestion(rq);
+                    }
+                  }
                 }}
               >
                 {/* Header Kartu */}
                 <div className="flex items-center justify-between mb-3">
-                  <span className="font-mono font-black text-sm text-slate-300">
-                    SOAL #{rq.question?.order_index}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-black text-sm text-slate-300">
+                      SOAL #{rq.question?.order_index}
+                    </span>
+                    {rq.question && (rq.question.type === 'ESSAY' || !rq.question.options || rq.question.options.length === 0) && (
+                      <span className="text-[10px] font-bold text-purple-300 bg-purple-950/60 border border-purple-500/40 px-1.5 py-0.5 rounded leading-none">
+                        Essay
+                      </span>
+                    )}
+                  </div>
                   <span
                     className={`text-xs font-mono font-bold px-2 py-0.5 rounded-md ${
                       isAvailable
-                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                        ? isInCooldown
+                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                          : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
                         : isLocked
                         ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                         : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
@@ -453,13 +543,23 @@ export default function StudentArenaPage() {
                 {/* Status Body */}
                 <div className="my-auto py-2">
                   {isAvailable && (
-                    <div className="text-center space-y-1">
-                      <span className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors flex items-center justify-center gap-1.5">
-                        <Zap className="w-4 h-4 text-cyan-400 group-hover:scale-125 transition-transform" />
-                        KLIK UNTUK KUNCI
-                      </span>
-                      <p className="text-[10px] text-slate-500">Batas pengerjaan 60 detik</p>
-                    </div>
+                    isInCooldown ? (
+                      <div className="text-center space-y-1">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-bold">
+                          <Clock className="w-3.5 h-3.5 text-rose-400 animate-spin" />
+                          <span>Penalti: {myCooldown}s</span>
+                        </div>
+                        <p className="text-[10px] text-rose-400/80">Tunggu cooldown penalti selesai</p>
+                      </div>
+                    ) : (
+                      <div className="text-center space-y-1">
+                        <span className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors flex items-center justify-center gap-1.5">
+                          <Zap className="w-4 h-4 text-cyan-400 group-hover:scale-125 transition-transform" />
+                          KLIK UNTUK KUNCI
+                        </span>
+                        <p className="text-[10px] text-slate-500">Batas pengerjaan 60 detik</p>
+                      </div>
+                    )
                   )}
 
                   {isLocked && (
@@ -512,12 +612,25 @@ export default function StudentArenaPage() {
             {/* Top Glowing Bar */}
             <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-rose-500 to-amber-500"></div>
 
-            {/* Modal Header: Nomor Soal, Timer Melingkar, & Nilai Poin */}
+            {/* Modal Header: Nomor Soal, Badge Tipe, Timer Melingkar, & Nilai Poin */}
             <div className="flex items-center justify-between mb-6">
               <div>
-                <span className="text-xs font-bold uppercase tracking-widest text-amber-400">
-                  Kamu Sedang Mengunci:
-                </span>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-bold uppercase tracking-widest text-amber-400">
+                    Kamu Sedang Mengunci:
+                  </span>
+                  <span
+                    className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                      activeQuestion.question.type === 'ESSAY' || !activeQuestion.question.options || activeQuestion.question.options.length === 0
+                        ? 'bg-purple-950/70 border-purple-500/50 text-purple-300 shadow-sm shadow-purple-500/20'
+                        : 'bg-cyan-950/70 border-cyan-500/50 text-cyan-300'
+                    }`}
+                  >
+                    {activeQuestion.question.type === 'ESSAY' || !activeQuestion.question.options || activeQuestion.question.options.length === 0
+                      ? '✍️ Essay / Isian Singkat'
+                      : '🔘 Pilihan Ganda'}
+                  </span>
+                </div>
                 <h3 className="text-xl sm:text-2xl font-black text-white">
                   Soal #{activeQuestion.question.order_index}
                 </h3>
@@ -545,91 +658,333 @@ export default function StudentArenaPage() {
               </p>
             </div>
 
-            {/* Pilihan Ganda (A, B, C, D) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-              {activeQuestion.question.options.map((opt) => {
-                const isSelected = selectedOption === opt.label;
-                return (
-                  <button
-                    type="button"
-                    key={opt.label}
-                    onClick={() => {
-                      setSelectedOption(opt.label);
-                      soundFx.playClick();
+            {/* Area Jawaban: Essay Teks vs Pilihan Ganda (A, B, C, D) */}
+            {activeQuestion.question.type === 'ESSAY' || !activeQuestion.question.options || activeQuestion.question.options.length === 0 ? (
+              <div className="mb-6 space-y-2">
+                <label className="block text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>✍️ Tuliskan Jawaban Essay / Isian Singkat Kamu:</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    autoFocus
+                    value={selectedOption || ''}
+                    onChange={(e) => setSelectedOption(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && selectedOption && selectedOption.trim() && !isSubmitting) {
+                        e.preventDefault();
+                        handleSubmitAnswer();
+                      }
                     }}
-                    className={`p-4 rounded-xl border text-left transition-all flex items-start gap-3 ${
-                      isSelected
-                        ? 'border-cyan-400 bg-cyan-950/50 text-white shadow-md shadow-cyan-500/20'
-                        : 'border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-700 hover:text-white'
-                    }`}
-                  >
-                    <span
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center font-mono font-bold text-xs shrink-0 ${
+                    placeholder="Ketik jawabanmu di sini... (tekan Enter untuk kirim)"
+                    className="w-full px-4 py-3.5 rounded-xl bg-slate-950 border-2 border-purple-500/50 focus:border-purple-400 focus:outline-none focus:ring-4 focus:ring-purple-500/20 text-white font-medium text-base sm:text-lg placeholder:text-slate-600 transition-all shadow-inner"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400 flex items-center gap-1">
+                  <span>💡</span>
+                  <span>Huruf besar/kecil tidak berpengaruh. Tekan <strong>Enter</strong> atau tombol di bawah untuk mengirim.</span>
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+                {activeQuestion.question.options.map((opt) => {
+                  const isSelected = selectedOption === opt.label;
+                  return (
+                    <button
+                      type="button"
+                      key={opt.label}
+                      onClick={() => {
+                        setSelectedOption(opt.label);
+                        soundFx.playClick();
+                      }}
+                      className={`p-4 rounded-xl border text-left transition-all flex items-start gap-3 ${
                         isSelected
-                          ? 'bg-cyan-400 text-slate-950'
-                          : 'bg-slate-800 text-slate-400'
+                          ? 'border-cyan-400 bg-cyan-950/50 text-white shadow-md shadow-cyan-500/20'
+                          : 'border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-700 hover:text-white'
                       }`}
                     >
-                      {opt.label}
-                    </span>
-                    <span className="text-sm font-medium pt-0.5 leading-snug">
-                      {opt.text}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                      <span
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center font-mono font-bold text-xs shrink-0 ${
+                          isSelected
+                            ? 'bg-cyan-400 text-slate-950'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        {opt.label}
+                      </span>
+                      <span className="text-sm font-medium pt-0.5 leading-snug">
+                        {opt.text}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
-            {/* Feedback Alert (Jika benar/salah) */}
-            {feedback && (
+            {/* Feedback Alert (Hanya saat jawaban Benar) */}
+            {feedback && feedback.type === 'success' && (
               <div className="space-y-3 mb-4 animate-in zoom-in-95">
-                <div
-                  className={`p-4 rounded-2xl border text-sm font-bold flex items-center gap-2 ${
-                    feedback.type === 'success'
-                      ? 'border-emerald-500 bg-emerald-950/60 text-emerald-300'
-                      : 'border-rose-500 bg-rose-950/60 text-rose-300'
-                  }`}
-                >
-                  {feedback.type === 'success' ? (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                  ) : (
-                    <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
-                  )}
+                <div className="p-4 rounded-2xl border text-sm font-bold flex items-center gap-2 border-emerald-500 bg-emerald-950/60 text-emerald-300">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
                   <span>{feedback.message}</span>
                 </div>
 
                 {/* Pembahasan Edukatif Soal */}
                 {activeQuestion.question.explanation && (
-                  <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-300 flex items-start gap-2.5">
+                  <div className="p-4 rounded-xl bg-slate-950/90 border border-slate-800 text-xs text-slate-300 flex items-start gap-2.5">
                     <span className="text-base">💡</span>
                     <div>
-                      <span className="font-bold text-amber-400 block mb-0.5">Pembahasan Singkat:</span>
-                      <span className="leading-relaxed">{activeQuestion.question.explanation}</span>
+                      <span className="font-bold text-amber-400 block mb-1">Pembahasan Singkat:</span>
+                      <span className="leading-relaxed text-slate-200">{activeQuestion.question.explanation}</span>
                     </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Action Button: Kirim Jawaban */}
+            {/* Action Buttons */}
             <div className="flex items-center justify-between gap-4 pt-2">
-              <div className="text-xs text-slate-400 hidden sm:block">
-                Poin jika benar: <strong className="text-amber-400">+{activeQuestion.question.points} PTS</strong>
-              </div>
+              {feedback?.type === 'success' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveQuestion(null);
+                    setSelectedOption(null);
+                    setFeedback(null);
+                    loadArenaData();
+                  }}
+                  className="w-full px-8 py-3.5 rounded-xl font-black text-sm bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/25 active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <ArrowRight className="w-4 h-4" />
+                  <span>TUTUP & KEMBALI KE ARENA SOAL</span>
+                </button>
+              ) : (
+                <>
+                  <div className="text-xs text-slate-400 hidden sm:block">
+                    Poin jika benar: <strong className="text-amber-400">+{activeQuestion.question.points} PTS</strong>
+                  </div>
+
+                  <div className="flex items-center gap-3 w-full sm:w-auto ml-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveQuestion(null);
+                        setSelectedOption(null);
+                        setFeedback(null);
+                      }}
+                      className="px-4 py-3.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all flex items-center gap-1.5"
+                    >
+                      <span>Batal / Tutup</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={!selectedOption || !selectedOption.trim() || isSubmitting}
+                      onClick={handleSubmitAnswer}
+                      className="flex-1 sm:flex-initial px-8 py-3.5 rounded-xl font-black text-sm bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <span>KIRIM JAWABAN</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL HASIL AKHIR SISWA (STUDENT RESULT & PODIUM SCREEN)                 */}
+      {/* ========================================================================= */}
+      {showResultModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-2xl bg-slate-900 border-2 border-amber-500/60 rounded-3xl p-6 sm:p-8 text-center relative overflow-hidden shadow-2xl shadow-amber-500/25 max-h-[90vh] flex flex-col">
+            {/* Header Modal */}
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 mx-auto mb-3 shrink-0">
+              <Trophy className="w-7 h-7" />
+            </div>
+
+            <h3 className="text-2xl font-black text-white mb-1">
+              Pertandingan Selesai!
+            </h3>
+            <p className="text-xs text-slate-400 mb-5">
+              Guru telah mengakhiri sesi arena. Berikut adalah hasil perjuangan dan peringkat kamu:
+            </p>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 mb-6 text-left">
+              {/* Kartu Performa Personal Siswa */}
+              {(() => {
+                const sortedParticipants = [...allParticipants].sort((a, b) => (b.score || 0) - (a.score || 0));
+                const myRank = sortedParticipants.findIndex((p) => p.id === participant?.id) + 1;
+                const sortedTeams = [...teams].sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
+                const myTeam = sortedTeams.find((t) => t.team_name === participant?.team_name);
+                const myTeamRank = myTeam ? sortedTeams.indexOf(myTeam) + 1 : null;
+
+                return (
+                  <>
+                    <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-cyan-500/10 to-amber-500/15 border-2 border-amber-500/50 relative overflow-hidden">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 text-center sm:text-left">
+                          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-slate-950 font-black text-xl shadow-lg shadow-amber-500/20 shrink-0">
+                            {myRank === 1 ? '🥇' : myRank === 2 ? '🥈' : myRank === 3 ? '🥉' : '🎖️'}
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 block">
+                              Hasil Kamu
+                            </span>
+                            <h4 className="text-lg font-black text-white">{participant?.name || 'Peserta'}</h4>
+                            {participant?.team_name && (
+                              <span className="text-xs font-semibold text-cyan-300">
+                                Kelompok: {participant.team_name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-6 text-center sm:text-right">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                              Peringkat
+                            </span>
+                            <span className="text-xl sm:text-2xl font-mono font-black text-amber-400">
+                              #{myRank > 0 ? myRank : '-'}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block">
+                              dari {sortedParticipants.length} siswa
+                            </span>
+                          </div>
+                          <div className="h-10 w-[1px] bg-slate-700/60"></div>
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                              Skor Akhir
+                            </span>
+                            <span className="text-xl sm:text-2xl font-mono font-black text-emerald-400">
+                              {participant?.score || 0}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block">PTS</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Hasil Kelompok jika mode TEAM */}
+                      {room.mode === 'TEAM' && myTeam && (
+                        <div className="mt-3.5 pt-3 border-t border-slate-700/60 flex items-center justify-between text-xs">
+                          <span className="text-slate-300">
+                            Peringkat Kelompok <strong className="text-amber-300">{participant?.team_name}</strong>:
+                          </span>
+                          <span className="font-mono font-bold text-cyan-300">
+                            #{myTeamRank || '-'} • Total {myTeam.total_score || 0} PTS
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Podium Juara Top 3 */}
+                    <div className="space-y-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400 block text-center">
+                        Podium Juara Kelas ({room.mode === 'TEAM' ? 'Kelompok' : 'Individu'})
+                      </span>
+                      {(room.mode === 'TEAM' ? sortedTeams : sortedParticipants).slice(0, 3).map((winner, idx) => (
+                        <div
+                          key={idx}
+                          className={`p-3 rounded-2xl border flex items-center justify-between ${
+                            idx === 0
+                              ? 'bg-amber-500/20 border-amber-500 text-white shadow-md shadow-amber-500/10'
+                              : idx === 1
+                              ? 'bg-slate-800/60 border-slate-700 text-slate-200'
+                              : 'bg-slate-900/40 border-slate-800 text-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono font-black text-base text-amber-400">
+                              {idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : '🥉 #3'}
+                            </span>
+                            <span className="font-extrabold text-sm">
+                              {room.mode === 'TEAM' ? (winner as Team).team_name : (winner as Participant).name}
+                            </span>
+                          </div>
+                          <span className="font-mono font-black text-sm text-amber-400">
+                            {room.mode === 'TEAM' ? (winner as Team).total_score : (winner as Participant).score} PTS
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Klasemen Seluruh Siswa */}
+                    <div className="pt-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
+                        Daftar Lengkap Skor Siswa ({sortedParticipants.length} Orang)
+                      </span>
+                      <div className="rounded-xl border border-slate-800 overflow-hidden text-xs max-h-48 overflow-y-auto">
+                        <table className="w-full text-left">
+                          <thead className="bg-slate-950/80 text-slate-400 font-semibold border-b border-slate-800 sticky top-0">
+                            <tr>
+                              <th className="p-2.5 pl-3">Rank</th>
+                              <th className="p-2.5">Nama Siswa</th>
+                              <th className="p-2.5">Kelompok</th>
+                              <th className="p-2.5 text-right pr-3">Skor</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60">
+                            {sortedParticipants.map((p, i) => {
+                              const isMe = p.id === participant?.id;
+                              return (
+                                <tr key={p.id} className={isMe ? 'bg-cyan-500/15 font-bold text-cyan-300' : 'hover:bg-slate-800/30'}>
+                                  <td className="p-2.5 pl-3 font-mono">#{i + 1}</td>
+                                  <td className="p-2.5">{p.name} {isMe && '(Kamu)'}</td>
+                                  <td className="p-2.5 text-slate-400">{p.team_name || '-'}</td>
+                                  <td className="p-2.5 text-right pr-3 font-mono font-bold text-amber-400">{p.score}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => router.push('/')}
+                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-950 text-xs font-black flex items-center justify-center gap-2 shadow-md shadow-cyan-500/20 transition-all active:scale-95"
+              >
+                <Home className="w-4 h-4" />
+                <span>Kembali ke Beranda</span>
+              </button>
 
               <button
                 type="button"
-                disabled={!selectedOption || isSubmitting || Boolean(feedback)}
-                onClick={handleSubmitAnswer}
-                className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-black text-sm bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ml-auto"
+                onClick={() => setShowResultModal(false)}
+                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition-all"
               >
-                <span>KIRIM JAWABAN SEKARANG</span>
-                <ArrowRight className="w-4 h-4" />
+                Tutup (Lihat Arena)
               </button>
             </div>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+export default function StudentArenaPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4">
+          <div className="w-10 h-10 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mb-3" />
+          <p className="text-slate-400 text-sm font-medium">Memuat Arena Pertandingan...</p>
+        </div>
+      }
+    >
+      <StudentArenaContent />
+    </React.Suspense>
   );
 }

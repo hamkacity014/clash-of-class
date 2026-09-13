@@ -43,6 +43,7 @@ CREATE TABLE participants (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     room_id UUID REFERENCES rooms(id) ON DELETE CASCADE,
     team_id UUID REFERENCES teams(id) ON DELETE SET NULL,
+    team_name VARCHAR(50),
     name VARCHAR(100) NOT NULL,
     score INT DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
@@ -55,9 +56,10 @@ CREATE TABLE questions (
     room_id UUID REFERENCES rooms(id) ON DELETE CASCADE,
     question_text TEXT NOT NULL,
     options JSONB NOT NULL,                 -- [{"label": "A", "text": "Jawaban A"}, ...]
-    correct_answer VARCHAR(10) NOT NULL,    -- "A", "B", "C", atau "D"
+    correct_answer TEXT NOT NULL,           -- "A", "B", "C", "D" atau kata kunci essay
     points INT DEFAULT 100,                 -- 100, 200, 300
-    order_index INT NOT NULL
+    order_index INT NOT NULL,
+    explanation TEXT                        -- Pembahasan edukatif
 );
 
 -- 7. Tabel Room Questions (Status Live Soal di Papan Arena)
@@ -104,8 +106,35 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 9. Aktifkan Supabase Realtime untuk tabel publik
-ALTER PUBLICATION supabase_realtime ADD TABLE rooms;
-ALTER PUBLICATION supabase_realtime ADD TABLE participants;
-ALTER PUBLICATION supabase_realtime ADD TABLE teams;
-ALTER PUBLICATION supabase_realtime ADD TABLE room_questions;
+-- 9. Aktifkan Supabase Realtime untuk tabel publik (Aman dijalankan berulang kali)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'rooms') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE rooms;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'participants') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE participants;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'teams') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE teams;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'room_questions') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE room_questions;
+    END IF;
+END $$;
+
+-- 10. Nonaktifkan RLS agar aplikasi kuis publik dapat membaca & menulis data secara instan
+ALTER TABLE rooms DISABLE ROW LEVEL SECURITY;
+ALTER TABLE teams DISABLE ROW LEVEL SECURITY;
+ALTER TABLE participants DISABLE ROW LEVEL SECURITY;
+ALTER TABLE questions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE room_questions DISABLE ROW LEVEL SECURITY;
+
+-- 11. Tambahkan kolom pendukung jika belum ada
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS explanation TEXT;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS team_name VARCHAR(50);
+
+-- 12. Muat ulang cache schema PostgREST agar kolom baru langsung dikenali instan
+NOTIFY pgrst, 'reload schema';
+
+

@@ -32,6 +32,8 @@ export interface Participant {
   joined_at: string;
 }
 
+export type QuestionType = 'MULTIPLE_CHOICE' | 'ESSAY';
+
 export interface QuestionOption {
   label: 'A' | 'B' | 'C' | 'D';
   text: string;
@@ -40,9 +42,10 @@ export interface QuestionOption {
 export interface Question {
   id: string;
   room_id: string;
+  type?: QuestionType; // 'MULTIPLE_CHOICE' | 'ESSAY'
   question_text: string;
   options: QuestionOption[];
-  correct_answer: 'A' | 'B' | 'C' | 'D';
+  correct_answer: string; // 'A' | 'B' | 'C' | 'D' or essay keyword
   points: number;
   order_index: number;
   explanation?: string; // Pembahasan edukatif
@@ -53,9 +56,10 @@ export interface QuestionPackage {
   category: string;
   author?: string;
   questions: Array<{
+    type?: QuestionType;
     question_text: string;
     options: QuestionOption[];
-    correct_answer: 'A' | 'B' | 'C' | 'D';
+    correct_answer: string;
     points: number;
     explanation?: string;
   }>;
@@ -77,6 +81,7 @@ export interface RoomQuestion {
 
 export type RealtimeEventType = 
   | 'GAME_STARTED'
+  | 'GAME_FINISHED'
   | 'QUESTION_LOCKED'
   | 'QUESTION_RELEASED'
   | 'QUESTION_SOLVED'

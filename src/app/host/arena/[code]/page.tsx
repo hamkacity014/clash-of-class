@@ -12,7 +12,8 @@ import {
   getActivityLogsByRoomId, 
   forceUnlockQuestion, 
   subscribeToRoomEvents,
-  exportScoresToCSV
+  exportScoresToCSV,
+  finishGame
 } from '@/lib/store';
 import { Room, Participant, Team, RoomQuestion, ActivityLog, RealtimeEventPayload } from '@/types';
 import { soundFx } from '@/lib/sound';
@@ -30,8 +31,10 @@ import {
   Sparkles,
   Award,
   Download,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Home
 } from 'lucide-react';
+import Link from 'next/link';
 
 export default function HostArenaPage() {
   const params = useParams();
@@ -106,14 +109,22 @@ export default function HostArenaPage() {
     soundFx.playClick();
   };
 
-  const handleEndGame = () => {
-    soundFx.playSuccess();
-    confetti({
-      particleCount: 120,
-      spread: 100,
-      origin: { y: 0.5 },
-      colors: ['#F59E0B', '#06B6D4', '#10B981', '#ffffff'],
-    });
+  const handleEndGame = async () => {
+    if (!room) return;
+    if (room.status !== 'FINISHED') {
+      if (!confirm('Apakah Anda yakin ingin mengakhiri sesi pertandingan ini? Seluruh tab siswa akan langsung berakhir dan menampilkan hasil.')) {
+        return;
+      }
+      soundFx.playSuccess();
+      confetti({
+        particleCount: 120,
+        spread: 100,
+        origin: { y: 0.5 },
+        colors: ['#F59E0B', '#06B6D4', '#10B981', '#ffffff'],
+      });
+      await finishGame(room.id);
+      await loadData();
+    }
     setShowEndModal(true);
   };
 
@@ -152,6 +163,11 @@ export default function HostArenaPage() {
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
                   PIN: {room.code}
                 </span>
+                {room.status === 'FINISHED' && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                    PERTANDINGAN SELESAI
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400">
                 Layar Proyektor Kelas • Host: <strong className="text-white">{room.teacher_name}</strong>
@@ -168,12 +184,26 @@ export default function HostArenaPage() {
               <span>{isFullScreen ? 'Keluar Fullscreen' : 'Layar Penuh (Proyektor)'}</span>
             </button>
 
+            {room.status === 'FINISHED' && (
+              <Link
+                href="/"
+                className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:border-slate-500 text-xs font-semibold text-slate-300 hover:text-white flex items-center gap-1.5 transition-all"
+              >
+                <Home className="w-4 h-4 text-slate-400" />
+                <span>Beranda</span>
+              </Link>
+            )}
+
             <button
               onClick={handleEndGame}
-              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md shadow-rose-600/20 transition-all flex items-center gap-1.5 active:scale-95"
+              className={`px-4 py-2 rounded-xl text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95 ${
+                room.status === 'FINISHED'
+                  ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/20'
+                  : 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/20'
+              }`}
             >
               <Award className="w-4 h-4" />
-              <span>Selesaikan Pertandingan</span>
+              <span>{room.status === 'FINISHED' ? 'Lihat Podium & Rekap Nilai' : 'Selesaikan Pertandingan'}</span>
             </button>
           </div>
         </div>
@@ -220,9 +250,16 @@ export default function HostArenaPage() {
                   >
                     {/* Header */}
                     <div className="flex items-center justify-between">
-                      <span className="font-mono font-black text-sm text-slate-300">
-                        SOAL #{rq.question?.order_index}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono font-black text-sm text-slate-300">
+                          SOAL #{rq.question?.order_index}
+                        </span>
+                        {rq.question && (rq.question.type === 'ESSAY' || !rq.question.options || rq.question.options.length === 0) && (
+                          <span className="text-[10px] font-bold text-purple-300 bg-purple-950/60 border border-purple-500/40 px-1.5 py-0.5 rounded leading-none">
+                            Essay
+                          </span>
+                        )}
+                      </div>
                       <span
                         className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${
                           isAvailable

@@ -12,6 +12,7 @@ import {
   Download, 
   Upload, 
   ArrowRight, 
+  ArrowLeft,
   CheckCircle2, 
   HelpCircle, 
   Sparkles, 
@@ -19,6 +20,7 @@ import {
   FileJson,
   Layers
 } from 'lucide-react';
+import Link from 'next/link';
 
 type DraftQuestion = Omit<Question, 'id' | 'room_id'>;
 
@@ -29,12 +31,14 @@ export default function QuestionBankPage() {
   const [questions, setQuestions] = useState<DraftQuestion[]>([]);
   
   // Form state
+  const [questionType, setQuestionType] = useState<'MULTIPLE_CHOICE' | 'ESSAY'>('MULTIPLE_CHOICE');
   const [questionText, setQuestionText] = useState('');
   const [optA, setOptA] = useState('');
   const [optB, setOptB] = useState('');
   const [optC, setOptC] = useState('');
   const [optD, setOptD] = useState('');
   const [correctAnswer, setCorrectAnswer] = useState<'A' | 'B' | 'C' | 'D'>('A');
+  const [essayAnswer, setEssayAnswer] = useState('');
   const [points, setPoints] = useState<number>(100);
   const [explanation, setExplanation] = useState('');
   const [successToast, setSuccessToast] = useState('');
@@ -62,20 +66,33 @@ export default function QuestionBankPage() {
 
   const handleAddQuestion = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!questionText.trim() || !optA.trim() || !optB.trim() || !optC.trim() || !optD.trim()) {
-      alert('Harap isi teks pertanyaan dan keempat pilihan jawaban (A, B, C, D)!');
+    if (!questionText.trim()) {
+      alert('Harap isi teks pertanyaan!');
       return;
     }
 
+    if (questionType === 'MULTIPLE_CHOICE') {
+      if (!optA.trim() || !optB.trim() || !optC.trim() || !optD.trim()) {
+        alert('Harap isi keempat pilihan jawaban (A, B, C, D) untuk soal pilihan ganda!');
+        return;
+      }
+    } else {
+      if (!essayAnswer.trim()) {
+        alert('Harap isi kunci jawaban / kata kunci untuk soal essay!');
+        return;
+      }
+    }
+
     const newQ: DraftQuestion = {
+      type: questionType,
       question_text: questionText.trim(),
-      options: [
+      options: questionType === 'MULTIPLE_CHOICE' ? [
         { label: 'A', text: optA.trim() },
         { label: 'B', text: optB.trim() },
         { label: 'C', text: optC.trim() },
         { label: 'D', text: optD.trim() },
-      ],
-      correct_answer: correctAnswer,
+      ] : [],
+      correct_answer: questionType === 'MULTIPLE_CHOICE' ? correctAnswer : essayAnswer.trim(),
       points,
       order_index: questions.length + 1,
       explanation: explanation.trim() || undefined,
@@ -92,11 +109,12 @@ export default function QuestionBankPage() {
     setOptB('');
     setOptC('');
     setOptD('');
+    setEssayAnswer('');
     setExplanation('');
     setCorrectAnswer('A');
     setPoints(100);
 
-    setSuccessToast(`Soal #${updated.length} berhasil ditambahkan!`);
+    setSuccessToast(`Soal #${updated.length} (${questionType === 'ESSAY' ? 'Essay' : 'Pilihan Ganda'}) berhasil ditambahkan!`);
     setTimeout(() => setSuccessToast(''), 3000);
   };
 
@@ -144,13 +162,13 @@ export default function QuestionBankPage() {
 
   // Lanjut buat room dengan paket ini
   const handleUseInRoom = () => {
-    if (questions.length === 0) {
-      alert('Tambahkan minimal 2 soal untuk membuat sesi kuis!');
+    if (questions.length < 2) {
+      alert('Tambahkan minimal 2 soal untuk membuat sesi kuis di arena!');
       return;
     }
     saveToLocalStorage(questions);
     soundFx.playSuccess();
-    router.push('/host?use_custom=1');
+    router.push('/host');
   };
 
   return (
@@ -158,6 +176,17 @@ export default function QuestionBankPage() {
       <Navbar />
 
       <main className="flex-1 max-w-6xl mx-auto px-4 py-8 sm:py-10 w-full">
+        {/* Tombol Navigasi Kembali */}
+        <div className="mb-5">
+          <Link
+            href="/host"
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-semibold text-slate-400 hover:text-white transition-all shadow-sm group"
+          >
+            <ArrowLeft className="w-4 h-4 text-cyan-400 group-hover:-translate-x-1 transition-transform" />
+            <span>Kembali ke Buat Sesi Room</span>
+          </Link>
+        </div>
+
         {/* Header Title & Actions */}
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
           <div>
@@ -229,6 +258,43 @@ export default function QuestionBankPage() {
               )}
 
               <form onSubmit={handleAddQuestion} className="space-y-4">
+                {/* Pilihan Tipe Pertanyaan */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                    Tipe Soal *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuestionType('MULTIPLE_CHOICE');
+                        soundFx.playClick();
+                      }}
+                      className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                        questionType === 'MULTIPLE_CHOICE'
+                          ? 'border-cyan-500 bg-cyan-950/40 text-cyan-300 shadow-sm shadow-cyan-500/20'
+                          : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span>Pilihan Ganda (A/B/C/D)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuestionType('ESSAY');
+                        soundFx.playClick();
+                      }}
+                      className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                        questionType === 'ESSAY'
+                          ? 'border-amber-500 bg-amber-950/40 text-amber-300 shadow-sm shadow-amber-500/20'
+                          : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span>Isian Singkat / Essay</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Judul Pertanyaan */}
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
@@ -239,85 +305,107 @@ export default function QuestionBankPage() {
                     rows={3}
                     value={questionText}
                     onChange={(e) => setQuestionText(e.target.value)}
-                    placeholder="Tuliskan pertanyaan di sini..."
+                    placeholder={questionType === 'ESSAY' ? 'Contoh: Apa nama proses tumbuhan membuat makanan sendiri?' : 'Tuliskan pertanyaan di sini...'}
                     className="w-full bg-slate-950/80 border border-slate-700/80 focus:border-cyan-400 rounded-xl px-4 py-2.5 text-sm text-white resize-none"
                   />
                 </div>
 
-                {/* 4 Opsi Jawaban */}
-                <div className="space-y-2.5">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    Pilihan Jawaban (A, B, C, D) *
-                  </label>
+                {/* Input Khusus Pilihan Ganda (A, B, C, D) */}
+                {questionType === 'MULTIPLE_CHOICE' ? (
+                  <div className="space-y-2.5">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Pilihan Jawaban (A, B, C, D) *
+                    </label>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div className="relative flex items-center">
-                      <span className="absolute left-3 font-mono font-bold text-xs text-amber-400">A</span>
-                      <input
-                        type="text"
-                        required
-                        value={optA}
-                        onChange={(e) => setOptA(e.target.value)}
-                        placeholder="Jawaban A"
-                        className="w-full bg-slate-950/80 border border-slate-700/80 focus:border-amber-400 rounded-xl pl-8 pr-3 py-2 text-xs text-white"
-                      />
-                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div className="relative flex items-center">
+                        <span className="absolute left-3 font-mono font-bold text-xs text-amber-400">A</span>
+                        <input
+                          type="text"
+                          required={questionType === 'MULTIPLE_CHOICE'}
+                          value={optA}
+                          onChange={(e) => setOptA(e.target.value)}
+                          placeholder="Jawaban A"
+                          className="w-full bg-slate-950/80 border border-slate-700/80 focus:border-amber-400 rounded-xl pl-8 pr-3 py-2 text-xs text-white"
+                        />
+                      </div>
 
-                    <div className="relative flex items-center">
-                      <span className="absolute left-3 font-mono font-bold text-xs text-amber-400">B</span>
-                      <input
-                        type="text"
-                        required
-                        value={optB}
-                        onChange={(e) => setOptB(e.target.value)}
-                        placeholder="Jawaban B"
-                        className="w-full bg-slate-950/80 border border-slate-700/80 focus:border-amber-400 rounded-xl pl-8 pr-3 py-2 text-xs text-white"
-                      />
-                    </div>
+                      <div className="relative flex items-center">
+                        <span className="absolute left-3 font-mono font-bold text-xs text-amber-400">B</span>
+                        <input
+                          type="text"
+                          required={questionType === 'MULTIPLE_CHOICE'}
+                          value={optB}
+                          onChange={(e) => setOptB(e.target.value)}
+                          placeholder="Jawaban B"
+                          className="w-full bg-slate-950/80 border border-slate-700/80 focus:border-amber-400 rounded-xl pl-8 pr-3 py-2 text-xs text-white"
+                        />
+                      </div>
 
-                    <div className="relative flex items-center">
-                      <span className="absolute left-3 font-mono font-bold text-xs text-amber-400">C</span>
-                      <input
-                        type="text"
-                        required
-                        value={optC}
-                        onChange={(e) => setOptC(e.target.value)}
-                        placeholder="Jawaban C"
-                        className="w-full bg-slate-950/80 border border-slate-700/80 focus:border-amber-400 rounded-xl pl-8 pr-3 py-2 text-xs text-white"
-                      />
-                    </div>
+                      <div className="relative flex items-center">
+                        <span className="absolute left-3 font-mono font-bold text-xs text-amber-400">C</span>
+                        <input
+                          type="text"
+                          required={questionType === 'MULTIPLE_CHOICE'}
+                          value={optC}
+                          onChange={(e) => setOptC(e.target.value)}
+                          placeholder="Jawaban C"
+                          className="w-full bg-slate-950/80 border border-slate-700/80 focus:border-amber-400 rounded-xl pl-8 pr-3 py-2 text-xs text-white"
+                        />
+                      </div>
 
-                    <div className="relative flex items-center">
-                      <span className="absolute left-3 font-mono font-bold text-xs text-amber-400">D</span>
-                      <input
-                        type="text"
-                        required
-                        value={optD}
-                        onChange={(e) => setOptD(e.target.value)}
-                        placeholder="Jawaban D"
-                        className="w-full bg-slate-950/80 border border-slate-700/80 focus:border-amber-400 rounded-xl pl-8 pr-3 py-2 text-xs text-white"
-                      />
+                      <div className="relative flex items-center">
+                        <span className="absolute left-3 font-mono font-bold text-xs text-amber-400">D</span>
+                        <input
+                          type="text"
+                          required={questionType === 'MULTIPLE_CHOICE'}
+                          value={optD}
+                          onChange={(e) => setOptD(e.target.value)}
+                          placeholder="Jawaban D"
+                          className="w-full bg-slate-950/80 border border-slate-700/80 focus:border-amber-400 rounded-xl pl-8 pr-3 py-2 text-xs text-white"
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-
-                {/* Kunci Jawaban & Bobot Poin */}
-                <div className="grid grid-cols-2 gap-3 pt-1">
+                ) : (
+                  /* Input Khusus Essay / Isian Singkat */
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                      Kunci Jawaban Benar
+                      Kunci Jawaban / Kata Kunci Essay *
                     </label>
-                    <select
-                      value={correctAnswer}
-                      onChange={(e) => setCorrectAnswer(e.target.value as 'A' | 'B' | 'C' | 'D')}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono font-bold"
-                    >
-                      <option value="A">Pilihan A</option>
-                      <option value="B">Pilihan B</option>
-                      <option value="C">Pilihan C</option>
-                      <option value="D">Pilihan D</option>
-                    </select>
+                    <input
+                      type="text"
+                      required={questionType === 'ESSAY'}
+                      value={essayAnswer}
+                      onChange={(e) => setEssayAnswer(e.target.value)}
+                      placeholder="Contoh: Fotosintesis (atau pisahkan sinonim dengan ';', misal: Fotosintesis; Fotosintesa)"
+                      className="w-full bg-slate-950/80 border border-slate-700/80 focus:border-amber-400 rounded-xl px-4 py-2.5 text-xs text-white"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      💡 Pencocokan jawaban siswa bersifat <em>case-insensitive</em> (mengabaikan huruf besar/kecil) dan mendukung multi-sinonim dengan pemisah tanda titik koma (<code>;</code>).
+                    </p>
                   </div>
+                )}
+
+                {/* Kunci Jawaban & Bobot Poin */}
+                <div className={`grid ${questionType === 'MULTIPLE_CHOICE' ? 'grid-cols-2' : 'grid-cols-1'} gap-3 pt-1`}>
+                  {questionType === 'MULTIPLE_CHOICE' && (
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                        Kunci Pilihan Benar
+                      </label>
+                      <select
+                        value={correctAnswer}
+                        onChange={(e) => setCorrectAnswer(e.target.value as 'A' | 'B' | 'C' | 'D')}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono font-bold"
+                      >
+                        <option value="A">Pilihan A</option>
+                        <option value="B">Pilihan B</option>
+                        <option value="C">Pilihan C</option>
+                        <option value="D">Pilihan D</option>
+                      </select>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
@@ -376,37 +464,54 @@ export default function QuestionBankPage() {
 
               {/* List Kartu Soal */}
               <div className="flex-1 overflow-y-auto space-y-3 max-h-[500px] pr-1">
-                {questions.map((q, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800 text-xs space-y-2 group hover:border-slate-700 transition-all"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="font-bold text-slate-200 line-clamp-2 leading-snug">
-                        #{q.order_index}. {q.question_text}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteQuestion(idx)}
-                        className="text-slate-500 hover:text-rose-400 p-1 transition-colors shrink-0"
-                        title="Hapus soal"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                {questions.map((q, idx) => {
+                  const isEssay = q.type === 'ESSAY' || !q.options || q.options.length === 0;
+                  return (
+                    <div
+                      key={idx}
+                      className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800 text-xs space-y-2 group hover:border-slate-700 transition-all"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="font-mono font-bold text-cyan-400">#{q.order_index}</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              isEssay
+                                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                                : 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
+                            }`}>
+                              {isEssay ? 'Essay' : 'Pilihan Ganda'}
+                            </span>
+                          </div>
+                          <span className="font-bold text-slate-200 line-clamp-2 leading-snug">
+                            {q.question_text}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteQuestion(idx)}
+                          className="text-slate-500 hover:text-rose-400 p-1 transition-colors shrink-0"
+                          title="Hapus soal"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
 
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/60 font-mono">
-                      <span className="text-emerald-400 font-bold">Kunci: ({q.correct_answer})</span>
-                      <span className="text-amber-400 font-bold">+{q.points} PTS</span>
-                    </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/60 font-mono">
+                        <span className="text-emerald-400 font-bold truncate max-w-[200px]" title={q.correct_answer}>
+                          Kunci: {isEssay ? q.correct_answer : `(${q.correct_answer})`}
+                        </span>
+                        <span className="text-amber-400 font-bold shrink-0">+{q.points} PTS</span>
+                      </div>
 
-                    {q.explanation && (
-                      <p className="text-[10px] text-slate-500 italic bg-slate-900/80 p-1.5 rounded-lg">
-                        💡 {q.explanation}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                      {q.explanation && (
+                        <p className="text-[10px] text-slate-500 italic bg-slate-900/80 p-1.5 rounded-lg">
+                          💡 {q.explanation}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
 
                 {questions.length === 0 && (
                   <div className="text-center py-12 text-slate-600 space-y-2">

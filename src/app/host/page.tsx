@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { createRoom } from '@/lib/store';
-import { QUESTION_PRESETS } from '@/lib/presets';
 import { GameMode } from '@/types';
 import { soundFx } from '@/lib/sound';
 import { 
@@ -15,11 +14,14 @@ import {
   Trash2, 
   Sparkles, 
   BookOpen, 
-  ArrowRight,
-  HelpCircle,
-  Loader2,
-  FileText,
-  Sliders
+  ArrowRight, 
+  ArrowLeft, 
+  HelpCircle, 
+  Loader2, 
+  FileText, 
+  Sliders,
+  AlertCircle,
+  CheckCircle2
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -29,8 +31,6 @@ export default function HostCreatePage() {
   const [title, setTitle] = useState('Turnamen Sains & Logika Cepat');
   const [mode, setMode] = useState<GameMode>('TEAM');
   const [lockDuration, setLockDuration] = useState<number>(60);
-  const [selectedPresetId, setSelectedPresetId] = useState<string>(QUESTION_PRESETS[0].id);
-  const [useCustomQuestions, setUseCustomQuestions] = useState(false);
   const [customQuestions, setCustomQuestions] = useState<any[]>([]);
   const [teams, setTeams] = useState<string[]>([
     'Tim Garuda',
@@ -50,12 +50,7 @@ export default function HostCreatePage() {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) {
             setCustomQuestions(parsed);
-            // Jika ada query param use_custom=1
-            const searchParams = new URLSearchParams(window.location.search);
-            if (searchParams.get('use_custom') === '1') {
-              setUseCustomQuestions(true);
-              setTitle('Kuis Soal Mandiri Guru');
-            }
+            setTitle('Kuis Soal Mandiri Guru');
           }
         } catch {}
       }
@@ -86,8 +81,8 @@ export default function HostCreatePage() {
       return;
     }
 
-    if (useCustomQuestions && customQuestions.length === 0) {
-      alert('Kamu belum memiliki soal di Bank Soal Mandiri! Silakan buat terlebih dahulu.');
+    if (customQuestions.length < 2) {
+      alert('Harap buat minimal 2 soal di Bank Soal Mandiri terlebih dahulu sebelum membuat room kuis!');
       return;
     }
 
@@ -101,8 +96,7 @@ export default function HostCreatePage() {
         mode,
         lock_duration: lockDuration,
         teams: mode === 'TEAM' ? teams : undefined,
-        preset_id: useCustomQuestions ? undefined : selectedPresetId,
-        custom_questions: useCustomQuestions ? customQuestions : undefined,
+        custom_questions: customQuestions,
       });
 
       router.push(`/host/lobby/${code}`);
@@ -113,13 +107,22 @@ export default function HostCreatePage() {
     }
   };
 
-  const selectedPreset = QUESTION_PRESETS.find((p) => p.id === selectedPresetId) || QUESTION_PRESETS[0];
-
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
       <Navbar />
 
       <main className="flex-1 max-w-4xl mx-auto px-4 py-8 sm:py-12 w-full">
+        {/* Tombol Navigasi Kembali */}
+        <div className="mb-5">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-semibold text-slate-400 hover:text-white transition-all shadow-sm group"
+          >
+            <ArrowLeft className="w-4 h-4 text-amber-400 group-hover:-translate-x-1 transition-transform" />
+            <span>Kembali ke Beranda</span>
+          </Link>
+        </div>
+
         {/* Header */}
         <div className="mb-8">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-semibold mb-3">
@@ -315,103 +318,75 @@ export default function HostCreatePage() {
               </div>
             </div>
 
-            {/* Pilihan Sumber Paket Soal */}
+            {/* Paket Soal Mandiri Guru (Wajib Dibuat Terlebih Dahulu) */}
             <div>
               <div className="flex items-center justify-between mb-3">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  Sumber Paket Soal:
+                  Paket Soal Pertandingan:
                 </label>
                 <Link
                   href="/host/questions"
                   className="text-xs font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition-colors"
                 >
                   <FileText className="w-3.5 h-3.5" />
-                  <span>Buka Editor Bank Soal &rarr;</span>
+                  <span>Editor Bank Soal &rarr;</span>
                 </Link>
               </div>
 
-              {/* Toggle Sumber: Preset vs Custom */}
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUseCustomQuestions(false);
-                    soundFx.playClick();
-                  }}
-                  className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
-                    !useCustomQuestions
-                      ? 'border-emerald-500 bg-emerald-950/30 text-emerald-300'
-                      : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Paket Bawaan Sistem
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUseCustomQuestions(true);
-                    soundFx.playClick();
-                  }}
-                  className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                    useCustomQuestions
-                      ? 'border-cyan-500 bg-cyan-950/30 text-cyan-300'
-                      : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <span>Bank Soal Mandiri</span>
-                  <span className="w-4 h-4 rounded-full bg-cyan-500/20 text-[10px] flex items-center justify-center">
-                    {customQuestions.length}
-                  </span>
-                </button>
-              </div>
-
-              {!useCustomQuestions ? (
-                /* Daftar Preset */
-                <div className="grid grid-cols-1 gap-3">
-                  {QUESTION_PRESETS.map((preset) => (
-                    <div
-                      key={preset.id}
-                      onClick={() => {
-                        setSelectedPresetId(preset.id);
-                        soundFx.playClick();
-                      }}
-                      className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start justify-between ${
-                        selectedPresetId === preset.id
-                          ? 'border-emerald-400 bg-emerald-950/20 shadow-md shadow-emerald-500/10'
-                          : 'border-slate-800 bg-slate-950/40 hover:border-slate-700'
-                      }`}
+              {customQuestions.length === 0 ? (
+                /* Empty State: Belum ada soal dibuat oleh Guru */
+                <div className="p-6 rounded-2xl bg-amber-950/20 border border-amber-500/40 text-center space-y-3 animate-in fade-in">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
+                    <AlertCircle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">Paket Soal Belum Dibuat</h4>
+                    <p className="text-xs text-slate-400 max-w-md mx-auto mt-1 leading-relaxed">
+                      Sesuai format kuis, Guru wajib membuat paket soal terlebih dahulu di Bank Soal Mandiri (minimal 2 soal). Soal dapat diketik manual atau diimpor dari file JSON.
+                    </p>
+                  </div>
+                  <div className="pt-2">
+                    <Link
+                      href="/host/questions"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-bold shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
                     >
-                      <div>
-                        <div className="font-bold text-sm text-white flex items-center gap-2">
-                          <span>{preset.name}</span>
-                          <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 font-normal">
-                            {preset.category}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400 mt-1">{preset.description}</p>
-                      </div>
-                      <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20 shrink-0">
-                        {preset.questions.length} Soal
-                      </span>
-                    </div>
-                  ))}
+                      <Plus className="w-4 h-4" />
+                      <span>BUAT PAKET SOAL SEKARANG</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  </div>
                 </div>
               ) : (
-                /* Tampilan Bank Soal Kustom */
-                <div className="p-5 rounded-2xl bg-cyan-950/20 border border-cyan-500/40 text-center space-y-3">
-                  <div className="flex items-center justify-center gap-2 text-cyan-300 font-bold text-sm">
-                    <FileText className="w-5 h-5 text-cyan-400" />
-                    <span>Paket Soal Mandiri Siap Digunakan</span>
+                /* Ready State: Soal mandiri guru siap digunakan */
+                <div className="p-5 rounded-2xl bg-cyan-950/20 border border-cyan-500/40 space-y-3 animate-in fade-in">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-white font-bold text-sm">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                      <span>Paket Soal Mandiri Siap Digunakan</span>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-cyan-300 bg-cyan-500/15 px-3 py-1 rounded-full border border-cyan-500/30">
+                      {customQuestions.length} Soal Siap
+                    </span>
                   </div>
-                  <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    Saat ini tersimpan <strong>{customQuestions.length} soal</strong> dari editor mandiri Anda. Soal-soal ini akan langsung dipertandingkan di arena.
+
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Total bobot nilai:{' '}
+                    <strong className="text-amber-400">
+                      {customQuestions.reduce((acc: number, q: any) => acc + (q.points || 100), 0)} PTS
+                    </strong>
+                    . Seluruh soal ini akan dienkripsi dan diunggah ke database arena kuis untuk diperebutkan siswa.
                   </p>
-                  <div className="pt-1">
+
+                  <div className="pt-1 flex items-center justify-between border-t border-slate-800/80 mt-2">
+                    <span className="text-[11px] text-slate-500">
+                      Ingin menambah atau mengedit soal?
+                    </span>
                     <Link
                       href="/host/questions"
                       className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-semibold hover:bg-cyan-500/20 transition-all"
                     >
-                      <span>Tambah atau Ubah Soal di Editor &rarr;</span>
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>Buka Editor Bank Soal &rarr;</span>
                     </Link>
                   </div>
                 </div>
@@ -423,13 +398,22 @@ export default function HostCreatePage() {
           <div className="pt-2">
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="w-full py-4 px-6 rounded-2xl font-black text-base bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-xl shadow-amber-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+              disabled={isSubmitting || customQuestions.length < 2}
+              className={`w-full py-4 px-6 rounded-2xl font-black text-base transition-all flex items-center justify-center gap-3 shadow-xl ${
+                customQuestions.length < 2
+                  ? 'bg-slate-800 text-slate-500 border border-slate-700/60 cursor-not-allowed shadow-none'
+                  : 'bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-amber-500/20 active:scale-[0.99]'
+              }`}
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
                   <span>MEMBUAT ARENA PERTANDINGAN...</span>
+                </>
+              ) : customQuestions.length < 2 ? (
+                <>
+                  <AlertCircle className="w-5 h-5 text-amber-500/70" />
+                  <span>BUAT MINIMAL 2 SOAL TERLEBIH DAHULU</span>
                 </>
               ) : (
                 <>
