@@ -1,0 +1,24 @@
+# Docker Compose for Live Development (Hot-Reload without installing Node locally)
+# Run with: docker compose -f docker-compose.dev.yml up
+services:
+  app-dev:
+    container_name: clash-of-class-dev
+    image: node:20-alpine
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - WATCHPACK_POLLING=true
+    env_file:
+      - path: .env.local
+        required: false
+      - path: .env
+        required: false
+    command: sh -c "npm install && npm run dev"
+    restart: unless-stopped
