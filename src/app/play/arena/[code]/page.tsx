@@ -472,11 +472,18 @@ function StudentArenaContent() {
         </div>
 
         {/* Grid Kartu Soal Arena */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-12">
-          {roomQuestions.map((rq) => {
-            const isAvailable = rq.status === 'AVAILABLE';
-            const isLocked = rq.status === 'LOCKED';
-            const isSolved = rq.status === 'SOLVED';
+        {roomQuestions.length === 0 ? (
+          <div className="py-16 text-center rounded-3xl bg-slate-900/50 border border-slate-800 p-8 my-8 animate-pulse">
+            <div className="w-10 h-10 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin mx-auto mb-3"></div>
+            <h3 className="text-base font-bold text-slate-200 mb-1">Menyiapkan Papan Soal Pertandingan...</h3>
+            <p className="text-xs text-slate-400">Menghubungkan ke server arena kuis cloud. Tunggu sebentar...</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-12">
+            {roomQuestions.map((rq) => {
+              const isAvailable = rq.status === 'AVAILABLE';
+              const isLocked = rq.status === 'LOCKED';
+              const isSolved = rq.status === 'SOLVED';
 
             // Hitung sisa detik jika locked
             let cardSecondsLeft = 0;
@@ -601,6 +608,7 @@ function StudentArenaContent() {
             );
           })}
         </div>
+        )}
       </main>
 
       {/* ========================================================================= */}

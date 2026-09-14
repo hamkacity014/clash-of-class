@@ -359,6 +359,20 @@ export async function createRoom(data: {
     });
   }
 
+  const initialRoomQuestions: RoomQuestion[] = questions.map((q) => ({
+    id: generateUUID(),
+    room_id: roomId,
+    question_id: q.id,
+    status: 'AVAILABLE',
+    locked_by_participant_id: null,
+    locked_by_team_id: null,
+    locked_by_name: null,
+    locked_at: null,
+    lock_expires_at: null,
+    solved_by_name: null,
+    question: q,
+  }));
+
   if (isSupabaseConfigured && supabase) {
     try {
       const rRes = await supabase.from('rooms').insert([newRoom]);
@@ -369,6 +383,22 @@ export async function createRoom(data: {
       }
       if (questions.length > 0) {
         await insertQuestionsToSupabase(questions);
+
+        // Langsung daftarkan room_questions ke Supabase Cloud
+        const toInsertRq = initialRoomQuestions.map((rq) => ({
+          id: rq.id,
+          room_id: rq.room_id,
+          question_id: rq.question_id,
+          status: 'AVAILABLE',
+          locked_by_participant_id: null,
+          locked_by_team_id: null,
+          locked_by_name: null,
+          locked_at: null,
+          lock_expires_at: null,
+          solved_by_name: null,
+        }));
+        const rqRes = await supabase.from('room_questions').insert(toInsertRq);
+        if (rqRes.error) console.error('⚠️ Supabase insert room_questions in createRoom failed:', rqRes.error.message);
       }
     } catch (err) {
       console.error('⚠️ Supabase exception in createRoom:', err);
@@ -378,6 +408,7 @@ export async function createRoom(data: {
   localStore.saveRoom(newRoom);
   localStore.saveTeams(roomId, teamList);
   localStore.saveQuestions(roomId, questions);
+  localStore.saveRoomQuestions(roomId, initialRoomQuestions);
 
   return { room: newRoom, code };
 }
@@ -593,10 +624,20 @@ export async function startGame(roomId: string): Promise<RoomQuestion[]> {
   room.status = 'ACTIVE';
   localStore.saveRoom(room);
 
+  // Update status room di Supabase
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await supabase.from('rooms').update({ status: 'ACTIVE' }).eq('id', roomId);
+    } catch (err) {
+      console.error('⚠️ Supabase update room status ACTIVE failed:', err);
+    }
+  }
+
   // Inisialisasi Room Questions jika belum ada
   let rqList = localStore.getRoomQuestions(roomId);
-  if (rqList.length === 0) {
-    const questions = await getQuestionsByRoomId(roomId);
+  const questions = await getQuestionsByRoomId(roomId);
+
+  if (rqList.length === 0 && questions.length > 0) {
     rqList = questions.map((q) => ({
       id: generateUUID(),
       room_id: roomId,
@@ -611,6 +652,30 @@ export async function startGame(roomId: string): Promise<RoomQuestion[]> {
       question: q,
     }));
     localStore.saveRoomQuestions(roomId, rqList);
+  }
+
+  // Sinkronkan room_questions ke Supabase Cloud
+  if (isSupabaseConfigured && supabase && rqList.length > 0) {
+    try {
+      const { data: existingSbRq } = await supabase.from('room_questions').select('id').eq('room_id', roomId);
+      if (!existingSbRq || existingSbRq.length === 0) {
+        const toInsert = rqList.map((rq) => ({
+          id: rq.id,
+          room_id: rq.room_id,
+          question_id: rq.question_id,
+          status: 'AVAILABLE',
+          locked_by_participant_id: null,
+          locked_by_team_id: null,
+          locked_by_name: null,
+          locked_at: null,
+          lock_expires_at: null,
+          solved_by_name: null,
+        }));
+        await supabase.from('room_questions').insert(toInsert);
+      }
+    } catch (err) {
+      console.error('⚠️ Supabase insert room_questions failed in startGame:', err);
+    }
   }
 
   // Tambah activity log
@@ -684,8 +749,132 @@ export async function finishGame(roomId: string): Promise<Room | null> {
 }
 
 export async function getRoomQuestions(roomId: string): Promise<RoomQuestion[]> {
-  const rqList = localStore.getRoomQuestions(roomId);
   const now = Date.now();
+
+  // 1. Prioritaskan pengambilan data live dari Supabase Cloud
+  if (isSupabaseConfigured && supabase) {
+    const client = supabase;
+    try {
+      const questions = await getQuestionsByRoomId(roomId);
+      const qMap = new Map<string, Question>(questions.map((q) => [q.id, q]));
+
+      const { data: sbRqData, error: sbRqErr } = await client
+        .from('room_questions')
+        .select('*')
+        .eq('room_id', roomId);
+
+      if (!sbRqErr && sbRqData && sbRqData.length > 0) {
+        let syncedRqList: RoomQuestion[] = sbRqData
+          .map((item: any) => ({
+            id: item.id,
+            room_id: item.room_id,
+            question_id: item.question_id,
+            status: (item.status || 'AVAILABLE') as 'AVAILABLE' | 'LOCKED' | 'SOLVED',
+            locked_by_participant_id: item.locked_by_participant_id,
+            locked_by_team_id: item.locked_by_team_id,
+            locked_by_name: item.locked_by_name,
+            locked_at: item.locked_at,
+            lock_expires_at: item.lock_expires_at,
+            solved_by_name: item.solved_by_name,
+            question: qMap.get(item.question_id),
+          }))
+          .filter((item) => Boolean(item.question));
+
+        // Cek lock expired secara realtime
+        let hasExpired = false;
+        syncedRqList.forEach((rq) => {
+          if (rq.status === 'LOCKED' && rq.lock_expires_at) {
+            const exp = new Date(rq.lock_expires_at).getTime();
+            if (exp <= now) {
+              rq.status = 'AVAILABLE';
+              rq.locked_by_participant_id = null;
+              rq.locked_by_team_id = null;
+              rq.locked_by_name = null;
+              rq.locked_at = null;
+              rq.lock_expires_at = null;
+              hasExpired = true;
+
+              // Update Supabase in background
+              client
+                .from('room_questions')
+                .update({
+                  status: 'AVAILABLE',
+                  locked_by_participant_id: null,
+                  locked_by_team_id: null,
+                  locked_by_name: null,
+                  locked_at: null,
+                  lock_expires_at: null,
+                })
+                .eq('id', rq.id)
+                .then();
+            }
+          }
+        });
+
+        syncedRqList.sort((a, b) => (a.question?.order_index || 0) - (b.question?.order_index || 0));
+        localStore.saveRoomQuestions(roomId, syncedRqList);
+        return syncedRqList;
+      }
+
+      // Auto-heal: Jika tabel room_questions di Supabase belum terisi tapi master questions ada
+      if (questions.length > 0) {
+        const generatedRqList: RoomQuestion[] = questions.map((q) => ({
+          id: generateUUID(),
+          room_id: roomId,
+          question_id: q.id,
+          status: 'AVAILABLE',
+          locked_by_participant_id: null,
+          locked_by_team_id: null,
+          locked_by_name: null,
+          locked_at: null,
+          lock_expires_at: null,
+          solved_by_name: null,
+          question: q,
+        }));
+
+        const toInsert = generatedRqList.map((rq) => ({
+          id: rq.id,
+          room_id: rq.room_id,
+          question_id: rq.question_id,
+          status: 'AVAILABLE',
+          locked_by_participant_id: null,
+          locked_by_team_id: null,
+          locked_by_name: null,
+          locked_at: null,
+          lock_expires_at: null,
+          solved_by_name: null,
+        }));
+
+        await supabase.from('room_questions').insert(toInsert);
+        localStore.saveRoomQuestions(roomId, generatedRqList);
+        return generatedRqList;
+      }
+    } catch (err) {
+      console.error('⚠️ Error fetching room_questions from Supabase Cloud:', err);
+    }
+  }
+
+  // 2. Fallback Local Memory Store
+  let rqList = localStore.getRoomQuestions(roomId);
+  if (rqList.length === 0) {
+    const questions = localStore.getQuestions(roomId);
+    if (questions.length > 0) {
+      rqList = questions.map((q) => ({
+        id: generateUUID(),
+        room_id: roomId,
+        question_id: q.id,
+        status: 'AVAILABLE',
+        locked_by_participant_id: null,
+        locked_by_team_id: null,
+        locked_by_name: null,
+        locked_at: null,
+        lock_expires_at: null,
+        solved_by_name: null,
+        question: q,
+      }));
+      localStore.saveRoomQuestions(roomId, rqList);
+    }
+  }
   let hasExpired = false;
 
   // Cek jika ada lock yang sudah melewati batas waktu (expired)
@@ -841,6 +1030,24 @@ export async function attemptLockQuestion(
 
   localStore.saveRoomQuestions(roomId, rqList);
 
+  // Sinkronkan update status locked ke Supabase Cloud
+  if (isSupabaseConfigured && supabase) {
+    try {
+      supabase
+        .from('room_questions')
+        .update({
+          status: 'LOCKED',
+          locked_by_participant_id: participant.id,
+          locked_by_team_id: participant.team_id || null,
+          locked_by_name: targetRq.locked_by_name,
+          locked_at: targetRq.locked_at,
+          lock_expires_at: expiresAt,
+        })
+        .eq('id', roomQuestionId)
+        .then();
+    } catch {}
+  }
+
   // Catat log
   localStore.addActivityLog(roomId, {
     id: generateUUID(),
@@ -918,6 +1125,40 @@ export async function submitAnswer(
 
     localStore.saveRoomQuestions(roomId, rqList);
 
+    // Update live status dan skor ke Supabase Cloud
+    if (isSupabaseConfigured && supabase) {
+      try {
+        supabase
+          .from('room_questions')
+          .update({
+            status: 'SOLVED',
+            solved_by_name: displayName,
+            lock_expires_at: null,
+          })
+          .eq('id', roomQuestionId)
+          .then();
+
+        const newScore = (participant.score || 0) + points;
+        supabase
+          .from('participants')
+          .update({ score: newScore })
+          .eq('id', participant.id)
+          .then();
+
+        if (room?.mode === 'TEAM' && participant.team_id) {
+          const tms = localStore.getTeams(roomId);
+          const myTeam = tms.find((t) => t.id === participant.team_id);
+          if (myTeam) {
+            supabase
+              .from('teams')
+              .update({ total_score: myTeam.total_score })
+              .eq('id', participant.team_id)
+              .then();
+          }
+        }
+      } catch {}
+    }
+
     // Activity Log
     localStore.addActivityLog(roomId, {
       id: generateUUID(),
@@ -954,6 +1195,24 @@ export async function submitAnswer(
     // Cooldown 20 detik anti-trolling
     localStore.setCooldown(`${participant.id}_${roomQuestionId}`, Date.now() + 20000);
     localStore.saveRoomQuestions(roomId, rqList);
+
+    // Update lepas lock ke Supabase Cloud
+    if (isSupabaseConfigured && supabase) {
+      try {
+        supabase
+          .from('room_questions')
+          .update({
+            status: 'AVAILABLE',
+            locked_by_participant_id: null,
+            locked_by_team_id: null,
+            locked_by_name: null,
+            locked_at: null,
+            lock_expires_at: null,
+          })
+          .eq('id', roomQuestionId)
+          .then();
+      } catch {}
+    }
 
     localStore.addActivityLog(roomId, {
       id: generateUUID(),
@@ -1014,6 +1273,24 @@ export async function handleQuestionTimeout(roomQuestionId: string, participant:
     localStore.setCooldown(`${participant.id}_${roomQuestionId}`, Date.now() + 20000);
     localStore.saveRoomQuestions(roomId, rqList);
 
+    // Update status ke Supabase Cloud
+    if (isSupabaseConfigured && supabase) {
+      try {
+        supabase
+          .from('room_questions')
+          .update({
+            status: 'AVAILABLE',
+            locked_by_participant_id: null,
+            locked_by_team_id: null,
+            locked_by_name: null,
+            locked_at: null,
+            lock_expires_at: null,
+          })
+          .eq('id', roomQuestionId)
+          .then();
+      } catch {}
+    }
+
     localStore.addActivityLog(roomId, {
       id: generateUUID(),
       text: `Waktu habis! Soal #${orderIndex} lepas dari ${displayName} dan kembali terbuka.`,
@@ -1052,6 +1329,24 @@ export async function forceUnlockQuestion(roomQuestionId: string, roomId: string
     targetRq.lock_expires_at = null;
 
     localStore.saveRoomQuestions(roomId, rqList);
+
+    // Update status ke Supabase Cloud
+    if (isSupabaseConfigured && supabase) {
+      try {
+        supabase
+          .from('room_questions')
+          .update({
+            status: 'AVAILABLE',
+            locked_by_participant_id: null,
+            locked_by_team_id: null,
+            locked_by_name: null,
+            locked_at: null,
+            lock_expires_at: null,
+          })
+          .eq('id', roomQuestionId)
+          .then();
+      } catch {}
+    }
 
     localStore.addActivityLog(roomId, {
       id: generateUUID(),
