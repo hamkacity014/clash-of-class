@@ -250,27 +250,28 @@ const localStore = new LocalStore();
 // PUBLIC METHODS
 // -------------------------------------------------------------
 
-// Helper aman untuk insert questions ke Supabase dengan fallback jika kolom explanation belum dibuat
+// Helper aman untuk insert questions ke Supabase dengan sanitasi schema
 async function insertQuestionsToSupabase(qList: Question[]) {
   if (!isSupabaseConfigured || !supabase || qList.length === 0) return;
   try {
-    const qRes = await supabase.from('questions').insert(qList);
+    // Buat payload yang 100% kompatibel dengan skema tabel questions Supabase (tanpa kolom type yang tidak ada di schema DB)
+    const sanitized = qList.map((q) => ({
+      id: q.id,
+      room_id: q.room_id,
+      question_text: q.question_text,
+      options: Array.isArray(q.options) ? q.options : [],
+      correct_answer: q.correct_answer || '',
+      points: q.points || 100,
+      order_index: q.order_index,
+      explanation: q.explanation || null,
+    }));
+
+    const qRes = await supabase.from('questions').insert(sanitized);
     if (qRes.error) {
+      console.warn('⚠️ Supabase insert questions warning:', qRes.error.message);
       if (qRes.error.message.includes('explanation')) {
-        // Kolom explanation belum ada di schema Supabase, strip field explanation dan insert ulang
-        const stripped = qList.map(({ explanation: _exp, ...rest }) => rest);
-        const retryRes = await supabase.from('questions').insert(stripped);
-        if (retryRes.error) console.warn('Supabase retry questions insert warning:', retryRes.error.message);
-      } else if (qRes.error.code === '22001' || qRes.error.message.includes('varying(10)')) {
-        // Jika kolom correct_answer masih VARCHAR(10) di Supabase, truncate untuk database insert agar tidak crash
-        const truncated = qList.map((q) => ({
-          ...q,
-          correct_answer: q.correct_answer.slice(0, 10),
-        }));
-        const retryRes = await supabase.from('questions').insert(truncated);
-        if (retryRes.error) console.warn('Supabase retry questions insert warning:', retryRes.error.message);
-      } else {
-        console.warn('Supabase insert questions warning:', qRes.error.message);
+        const stripped = sanitized.map(({ explanation: _exp, ...rest }) => rest);
+        await supabase.from('questions').insert(stripped);
       }
     }
   } catch (err) {
@@ -517,17 +518,48 @@ export async function getParticipantsByRoomId(roomId: string): Promise<Participa
 }
 
 export async function getQuestionsByRoomId(roomId: string): Promise<Question[]> {
-  const localQuestions = localStore.getQuestions(roomId);
+  let localQuestions = localStore.getQuestions(roomId);
+
+  // Jika localQuestions masih kosong di browser guru, pulihkan dari custom_draft_questions localStorage
+  if (localQuestions.length === 0 && typeof window !== 'undefined') {
+    try {
+      const draft = localStorage.getItem('custom_draft_questions');
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          localQuestions = parsed.map((q: any, idx: number) => ({
+            id: generateUUID(),
+            room_id: roomId,
+            order_index: idx + 1,
+            question_text: q.question_text,
+            options: q.options || [],
+            correct_answer: q.correct_answer || '',
+            points: q.points || 100,
+            explanation: q.explanation,
+            type: q.type || ((!q.options || q.options.length === 0) ? 'ESSAY' : 'MULTIPLE_CHOICE'),
+          }));
+          localStore.saveQuestions(roomId, localQuestions);
+        }
+      }
+    } catch {}
+  }
+
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('questions')
         .select('*')
         .eq('room_id', roomId)
         .order('order_index', { ascending: true });
-      if (data && data.length > 0) return data as Question[];
 
-      // Auto-sync soal jika di Supabase belum ada
+      if (!error && data && data.length > 0) {
+        return data.map((item: any) => ({
+          ...item,
+          type: (item.options && item.options.length > 0) ? 'MULTIPLE_CHOICE' : 'ESSAY',
+        })) as Question[];
+      }
+
+      // Auto-sync soal jika di Supabase belum ada tapi di local/draft ada
       if (localQuestions.length > 0) {
         const { data: rCheck } = await supabase.from('rooms').select('id').eq('id', roomId).maybeSingle();
         if (rCheck) {
