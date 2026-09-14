@@ -1,0 +1,681 @@
+{
+  "title": "Informatika Kelas 10 - Kurikulum Merdeka (Fase E) - Paket 2",
+  "description": "Paket 2 (50 Soal Baru): Berpikir Komputasional, Algoritma & Flowchart, Struktur Data (Stack, Queue, Search, Sort), serta Variabel & Tipe Data.",
+  "questions": [
+    {
+      "order_index": 1,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Seorang perancang aplikasi menggambar denah alur menu tanpa memasukkan detail warna font atau animasi tombol agar fokus pada alur navigasi. Pilar berpikir komputasional yang diterapkan adalah...",
+      "options": [
+        { "label": "A", "text": "Abstraksi" },
+        { "label": "B", "text": "Dekomposisi" },
+        { "label": "C", "text": "Pengenalan Pola" },
+        { "label": "D", "text": "Perancangan Algoritma" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Abstraksi adalah memfokuskan perhatian pada hal-hal penting dan mengesampingkan rincian yang tidak esensial."
+    },
+    {
+      "order_index": 2,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Dalam pembuatan game edukasi, tugas dibagi menjadi: perancangan karakter, pembuatan musik latar, penulisan cerita, dan penulisan kode mekanik permainan. Pendekatan ini merupakan penerapan dari...",
+      "options": [
+        { "label": "A", "text": "Dekomposisi" },
+        { "label": "B", "text": "Abstraksi" },
+        { "label": "C", "text": "Pengenalan Pola" },
+        { "label": "D", "text": "Enkapsulasi" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Dekomposisi memecah proyek atau permasalahan besar menjadi bagian-bagian yang lebih kecil dan dapat dikelola."
+    },
+    {
+      "order_index": 3,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Seorang mekanik mendengarkan suara mesin motor yang bising dan langsung mengetahui bahwa penyebabnya adalah rantai keteng yang kendor karena pernah menangani puluhan motor dengan gejala serupa. Hal ini menunjukkan pilar...",
+      "options": [
+        { "label": "A", "text": "Pengenalan Pola (Pattern Recognition)" },
+        { "label": "B", "text": "Dekomposisi Masalah" },
+        { "label": "C", "text": "Abstraksi Sistematis" },
+        { "label": "D", "text": "Pengurutan Algoritmik" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Pengenalan pola melibatkan pengamatan kesamaan dan keteraturan pada masalah yang pernah ditemui sebelumnya."
+    },
+    {
+      "order_index": 4,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Petunjuk perakitan meja kayu lipat yang menyajikan instruksi langkah nomor 1 hingga 8 secara runtut dan jelas merupakan bentuk perwujudan dari pilar...",
+      "options": [
+        { "label": "A", "text": "Perancangan Algoritma" },
+        { "label": "B", "text": "Abstraksi" },
+        { "label": "C", "text": "Dekomposisi" },
+        { "label": "D", "text": "Evaluasi" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Perancangan algoritma adalah menyusun langkah-langkah terstruktur dan berurutan untuk menyelesaikan suatu tujuan."
+    },
+    {
+      "order_index": 5,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Manakah pernyataan berikut yang BUKAN merupakan sifat dari berpikir komputasional?",
+      "options": [
+        { "label": "A", "text": "Berpikir konseptual dan logis dalam memecahkan masalah" },
+        { "label": "B", "text": "Selalu bergantung pada penggunaan komputer fisik untuk berpikir" },
+        { "label": "C", "text": "Dapat diterapkan pada berbagai disiplin ilmu di luar komputer" },
+        { "label": "D", "text": "Mampu menggeneralisasi solusi untuk berbagai masalah serupa" }
+      ],
+      "correct_answer": "B",
+      "points": 100,
+      "explanation": "Berpikir komputasional adalah proses berpikir manusia (mental process), tidak selalu harus menggunakan perangkat komputer fisik."
+    },
+    {
+      "order_index": 6,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Pada aplikasi Google Maps, jalur rute tercepat ditampilkan dengan garis warna biru, jalanan macet berwarna merah, tanpa menampilkan pohon atau warna rumah warga. Teknik penyederhanaan informasi visual ini disebut...",
+      "options": [
+        { "label": "A", "text": "Abstraksi" },
+        { "label": "B", "text": "Algoritma" },
+        { "label": "C", "text": "Dekomposisi" },
+        { "label": "D", "text": "Normalisasi" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Penyederhanaan informasi dengan membuang detail yang tidak relevan (seperti warna rumah/pohon) adalah contoh nyata abstraksi."
+    },
+    {
+      "order_index": 7,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Andi ingin menyelesaikan teka-teki Sudoku. Ia membagi papan Sudoku 9x9 menjadi sembilan kotak kecil berukuran 3x3 agar lebih mudah dianalisis. Cara berpikir Andi menerapkan pilar...",
+      "options": [
+        { "label": "A", "text": "Dekomposisi" },
+        { "label": "B", "text": "Abstraksi" },
+        { "label": "C", "text": "Pengurutan Data" },
+        { "label": "D", "text": "Pencarian Biner" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Membagi papan besar 9x9 menjadi 9 blok kecil 3x3 merupakan contoh dekomposisi masalah."
+    },
+    {
+      "order_index": 8,
+      "type": "ESSAY",
+      "question_text": "Sebutkan 4 pilar utama dalam Berpikir Komputasional (Computational Thinking)!",
+      "options": [],
+      "correct_answer": "Dekomposisi, Abstraksi, Pengenalan Pola, Algoritma; Dekomposisi, Pengenalan Pola, Abstraksi, Algoritma; Decomposition, Pattern Recognition, Abstraction, Algorithm",
+      "points": 150,
+      "explanation": "Empat pilar utama berpikir komputasional adalah Dekomposisi, Pengenalan Pola, Abstraksi, dan Perancangan Algoritma."
+    },
+    {
+      "order_index": 9,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Menganalisis pola pembelian konsumen di supermarket setiap akhir pekan untuk menentukan tata letak rak barang promosi merupakan penerapan dari...",
+      "options": [
+        { "label": "A", "text": "Pengenalan Pola" },
+        { "label": "B", "text": "Dekomposisi" },
+        { "label": "C", "text": "Abstraksi" },
+        { "label": "D", "text": "Pseudocode" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Mendeteksi kebiasaan atau tren dari sekumpulan data transaksi adalah bentuk pengenalan pola (pattern recognition)."
+    },
+    {
+      "order_index": 10,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Apa manfaat utama menerapkan dekomposisi saat menghadapi masalah yang sangat rumit?",
+      "options": [
+        { "label": "A", "text": "Membuat masalah menjadi sub-masalah yang lebih sederhana sehingga mudah diselesaikan satu per satu" },
+        { "label": "B", "text": "Menghindari penulisan kode program secara keseluruhan" },
+        { "label": "C", "text": "Membuat program berjalan tanpa memerlukan memori komputer" },
+        { "label": "D", "text": "Menghilangkan kebutuhan akan algoritma" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Dekomposisi menyederhanakan masalah besar menjadi sub-masalah kecil yang fokus dan mandiri untuk diselesaikan."
+    },
+    {
+      "order_index": 11,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Setelah berhasil membuat algoritma pencarian buku di perpustakaan sekolah, tim menggunakan logika yang sama untuk membuat fitur pencarian arsip surat kantor desa. Langkah memperluas solusi ini disebut...",
+      "options": [
+        { "label": "A", "text": "Generalisasi Pola" },
+        { "label": "B", "text": "Reduksi Algoritma" },
+        { "label": "C", "text": "Dekomposisi Parsial" },
+        { "label": "D", "text": "Debugging" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Generalisasi adalah kemampuan mengadaptasi pola solusi dari satu masalah ke masalah lain yang sejenis."
+    },
+    {
+      "order_index": 12,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Urutan langkah logis: 1) Masukkan kartu ATM, 2) Ketik PIN, 3) Pilih menu Tarik Tunai, 4) Masukkan nominal, 5) Ambil uang dan kartu. Urutan langkah terstruktur ini disebut...",
+      "options": [
+        { "label": "A", "text": "Algoritma" },
+        { "label": "B", "text": "Abstraksi" },
+        { "label": "C", "text": "Variabel" },
+        { "label": "D", "text": "Tipe Data" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Urutan instruksi langkah demi langkah yang pasti untuk mencapai tujuan tertentu merupakan definisi algoritma."
+    },
+    {
+      "order_index": 13,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Pada diagram alir (flowchart), simbol berbentuk persegi panjang (rectangle) digunakan untuk melambangkan...",
+      "options": [
+        { "label": "A", "text": "Proses pengolahan data atau perhitungan aritmatika" },
+        { "label": "B", "text": "Awal dan akhir dari suatu program (Terminator)" },
+        { "label": "C", "text": "Pengambilan keputusan logika (Decision)" },
+        { "label": "D", "text": "Pemasukan data dari pengguna (Input)" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Simbol persegi panjang pada flowchart menggambarkan proses pengolahan, penugasan variabel, atau perhitungan matematika."
+    },
+    {
+      "order_index": 14,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Simbol flowchart yang berbentuk belah ketupat (diamond / rhombus) memiliki fungsi utama untuk...",
+      "options": [
+        { "label": "A", "text": "Pengambilan keputusan (percabangan kondisi Ya/Tidak atau Benar/Salah)" },
+        { "label": "B", "text": "Mencetak hasil ke monitor" },
+        { "label": "C", "text": "Menghubungkan flowchart ke halaman berbeda" },
+        { "label": "D", "text": "Menyimpan data ke harddisk" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Simbol belah ketupat (Decision) digunakan untuk menguji kondisi logika yang menghasilkan dua cabang (True/False)."
+    },
+    {
+      "order_index": 15,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Simbol flowchart yang berbentuk jajar genjang (parallelogram) digunakan untuk mewakili operasi...",
+      "options": [
+        { "label": "A", "text": "Input (masukan) dan Output (keluaran) data" },
+        { "label": "B", "text": "Mulai dan Berhenti" },
+        { "label": "C", "text": "Perulangan for-loop" },
+        { "label": "D", "text": "Konektor antar baris" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Jajar genjang digunakan untuk operasi Input (seperti membaca data dari keyboard) dan Output (seperti menampilkan hasil ke layar)."
+    },
+    {
+      "order_index": 16,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Simbol flowchart berbentuk oval atau elips lonjong (Terminator) digunakan untuk...",
+      "options": [
+        { "label": "A", "text": "Menandai awal (Start) atau akhir (End) dari suatu alur flowchart" },
+        { "label": "B", "text": "Menghitung rumus lingkaran" },
+        { "label": "C", "text": "Memeriksa nilai ganjil genap" },
+        { "label": "D", "text": "Menghubungkan program ke internet" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Terminator (oval/kapsul) selalu berada di titik paling awal (Start) dan paling akhir (Stop/End) sebuah flowchart."
+    },
+    {
+      "order_index": 17,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Simbol lingkaran kecil (Connector) pada flowchart digunakan untuk...",
+      "options": [
+        { "label": "A", "text": "Menyambungkan alur diagram pada halaman atau lembar kerja yang sama" },
+        { "label": "B", "text": "Menyambungkan diagram ke halaman lembar kertas lain" },
+        { "label": "C", "text": "Menghapus data di memori" },
+        { "label": "D", "text": "Menandai terjadinya error" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Simbol lingkaran kecil adalah On-Page Connector yang merapikan garis alir yang rumit pada halaman yang sama."
+    },
+    {
+      "order_index": 18,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Apa yang dimaksud dengan Pseudocode?",
+      "options": [
+        { "label": "A", "text": "Notasi penulisan algoritma yang menyerupai bahasa pemrograman tingkat tinggi tetapi lebih mudah dibaca manusia" },
+        { "label": "B", "text": "Bahasa mesin biner yang terdiri dari angka 0 dan 1" },
+        { "label": "C", "text": "Kode rahasia yang terinfeksi oleh virus komputer" },
+        { "label": "D", "text": "Gambar visual alur program dengan simbol-simbol geometris" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Pseudocode adalah kode semu yang menggunakan bahasa formal sederhana untuk mempermudah penerjemahan algoritma ke bahasa pemrograman riil."
+    },
+    {
+      "order_index": 19,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Diberikan pseudocode berikut:\n`a = 8`\n`b = 3`\n`a = a + b`\n`b = a - b`\n`a = a - b`\nBerapakah nilai akhir variabel a dan b secara berurutan?",
+      "options": [
+        { "label": "A", "text": "a = 3 dan b = 8" },
+        { "label": "B", "text": "a = 8 dan b = 3" },
+        { "label": "C", "text": "a = 11 dan b = 8" },
+        { "label": "D", "text": "a = 11 dan b = 3" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Ini adalah algoritma swap (pertukaran nilai): a=8+3=11; b=11-3=8; a=11-8=3. Nilai a menjadi 3 dan b menjadi 8."
+    },
+    {
+      "order_index": 20,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Perhatikan pseudocode perulangan berikut:\n`hasil = 0`\n`FOR i = 1 TO 4 DO:`\n`  hasil = hasil + i`\nBerapakah nilai variabel `hasil` setelah perulangan selesai?",
+      "options": [
+        { "label": "A", "text": "10" },
+        { "label": "B", "text": "4" },
+        { "label": "C", "text": "8" },
+        { "label": "D", "text": "15" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Iterasi: i=1 (hasil=1), i=2 (hasil=3), i=3 (hasil=6), i=4 (hasil=10). Total akhir adalah 10."
+    },
+    {
+      "order_index": 21,
+      "type": "ESSAY",
+      "question_text": "Sebutkan nama simbol flowchart berbentuk belah ketupat yang digunakan untuk percabangan atau pemilihan kondisi logis!",
+      "options": [],
+      "correct_answer": "Decision; Belah Ketupat; Keputusan; Rhombus",
+      "points": 100,
+      "explanation": "Simbol Decision (belah ketupat) digunakan untuk menyatakan keputusan logika percabangan."
+    },
+    {
+      "order_index": 22,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Struktur kontrol algoritma yang mengeksekusi sekumpulan instruksi berulang kali selama suatu kondisi tertentu masih terpenuhi disebut...",
+      "options": [
+        { "label": "A", "text": "Looping (Perulangan)" },
+        { "label": "B", "text": "Branching (Percabangan)" },
+        { "label": "C", "text": "Sekuensial (Runtunan)" },
+        { "label": "D", "text": "Kompilasi" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Looping atau perulangan (seperti for atau while) mengulang eksekusi kode selama kondisinya bernilai benar."
+    },
+    {
+      "order_index": 23,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Manakah di antara pilihan berikut yang merupakan contoh algoritma sekuensial (runtutan lurus tanpa percabangan atau perulangan)?",
+      "options": [
+        { "label": "A", "text": "Menghitung keliling persegi panjang: Input p dan l -> Keliling = 2*(p+l) -> Cetak Keliling" },
+        { "label": "B", "text": "Menentukan siswa lulus jika nilai >= 75, jika tidak maka remidi" },
+        { "label": "C", "text": "Mencetak angka 1 sampai 100 di layar" },
+        { "label": "D", "text": "Memeriksa apakah bilangan bernilai ganjil atau genap" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Struktur sekuensial menjalankan setiap langkah secara lurus dari awal sampai akhir tanpa ada keputusan/kondisi atau putaran."
+    },
+    {
+      "order_index": 24,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Kondisi di mana sebuah perulangan berjalan terus-menerus tanpa pernah berhenti karena kondisi keluar tidak pernah tercapai disebut...",
+      "options": [
+        { "label": "A", "text": "Infinite Loop" },
+        { "label": "B", "text": "Deadlock Memory" },
+        { "label": "C", "text": "Buffer Overflow" },
+        { "label": "D", "text": "Syntax Error" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Infinite loop adalah situasi perulangan tak terhingga yang terjadi jika kondisi terminasi tidak pernah bernilai False."
+    },
+    {
+      "order_index": 25,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Garis panah (Flowline) pada diagram alir (flowchart) berfungsi untuk...",
+      "options": [
+        { "label": "A", "text": "Menunjukkan arah jalannya instruksi dari satu simbol ke simbol berikutnya" },
+        { "label": "B", "text": "Menyimpan nilai variabel secara permanen" },
+        { "label": "C", "text": "Membagi layar menjadi dua bagian" },
+        { "label": "D", "text": "Menunjukkan terjadinya kerusakan perangkat keras" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Garis alir (flowline) menunjukkan urutan dan arah eksekusi proses dalam sebuah flowchart."
+    },
+    {
+      "order_index": 26,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Struktur data Stack (Tumpukan) bekerja berdasarkan prinsip dasar...",
+      "options": [
+        { "label": "A", "text": "LIFO (Last In First Out)" },
+        { "label": "B", "text": "FIFO (First In First Out)" },
+        { "label": "C", "text": "Random Access Data" },
+        { "label": "D", "text": "Priority Sorted" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Stack menerapkan LIFO: elemen yang terakhir dimasukkan adalah elemen yang pertama kali akan dikeluarkan."
+    },
+    {
+      "order_index": 27,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Operasi untuk menambahkan elemen baru ke bagian paling atas (top) pada struktur data Stack disebut...",
+      "options": [
+        { "label": "A", "text": "Push" },
+        { "label": "B", "text": "Pop" },
+        { "label": "C", "text": "Enqueue" },
+        { "label": "D", "text": "Dequeue" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Operasi dasar menyisipkan atau memasukkan elemen ke puncak tumpukan Stack disebut 'Push'."
+    },
+    {
+      "order_index": 28,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Operasi untuk menghapus atau mengambil elemen teratas dari struktur data Stack disebut...",
+      "options": [
+        { "label": "A", "text": "Pop" },
+        { "label": "B", "text": "Push" },
+        { "label": "C", "text": "Peek" },
+        { "label": "D", "text": "Poll" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Operasi mengeluarkan elemen teratas dari tumpukan Stack disebut 'Pop'."
+    },
+    {
+      "order_index": 29,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Struktur data antrean (Queue) beroperasi dengan mematuhi aturan...",
+      "options": [
+        { "label": "A", "text": "FIFO (First In First Out)" },
+        { "label": "B", "text": "LIFO (Last In First Out)" },
+        { "label": "C", "text": "FILO (First In Last Out)" },
+        { "label": "D", "text": "Random Order" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Queue menerapkan FIFO: elemen yang pertama kali masuk ke antrean adalah yang pertama kali dilayani dan keluar."
+    },
+    {
+      "order_index": 30,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Dalam struktur data antrean (Queue), proses penambahan elemen baru ke barisan paling belakang disebut...",
+      "options": [
+        { "label": "A", "text": "Enqueue" },
+        { "label": "B", "text": "Dequeue" },
+        { "label": "C", "text": "Push" },
+        { "label": "D", "text": "Pop" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Enqueue adalah proses memasukkan elemen ke antrean belakang (rear/tail)."
+    },
+    {
+      "order_index": 31,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Fitur tombol 'Back' dan 'Forward' pada penjelajah web (web browser) atau fitur 'Undo' pada text editor mengadopsi cara kerja struktur data...",
+      "options": [
+        { "label": "A", "text": "Stack" },
+        { "label": "B", "text": "Queue" },
+        { "label": "C", "text": "Binary Tree" },
+        { "label": "D", "text": "Array 2 Dimensi" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Riwayat halaman terakhir yang dikunjungi akan dibuka kembali pertama kali saat tombol Back ditekan (prinsip LIFO Stack)."
+    },
+    {
+      "order_index": 32,
+      "type": "ESSAY",
+      "question_text": "Apa kepanjangan dari singkatan FIFO yang menjadi prinsip utama struktur data antrean (Queue)?",
+      "options": [],
+      "correct_answer": "First In First Out; First In, First Out; Masuk pertama keluar pertama",
+      "points": 100,
+      "explanation": "FIFO merupakan singkatan dari First In First Out."
+    },
+    {
+      "order_index": 33,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Antrean pencetakan dokumen pada printer di mana dokumen yang dikirim lebih awal akan dicetak terlebih dahulu mengimplementasikan konsep...",
+      "options": [
+        { "label": "A", "text": "Queue (Antrean)" },
+        { "label": "B", "text": "Stack (Tumpukan)" },
+        { "label": "C", "text": "Sorting Ascending" },
+        { "label": "D", "text": "Bubble Sort" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Sistem antrean cetak printer (print spooler) menerapkan antrean FIFO (Queue)."
+    },
+    {
+      "order_index": 34,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Algoritma pencarian yang memeriksa setiap elemen dari indeks ke-0 sampai indeks terakhir secara berurutan hingga data ditemukan disebut...",
+      "options": [
+        { "label": "A", "text": "Linear Search (Sequential Search)" },
+        { "label": "B", "text": "Binary Search" },
+        { "label": "C", "text": "Interpolation Search" },
+        { "label": "D", "text": "Quick Search" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Linear Search menelusuri data satu demi satu secara linier tanpa memerlukan data terurut."
+    },
+    {
+      "order_index": 35,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Syarat mutlak agar algoritma Binary Search (Pencarian Biner) dapat dijalankan dengan benar adalah...",
+      "options": [
+        { "label": "A", "text": "Data dalam daftar harus sudah terurut (sorted)" },
+        { "label": "B", "text": "Jumlah data harus berjumlah genap" },
+        { "label": "C", "text": "Semua data harus bertipe teks" },
+        { "label": "D", "text": "Data tidak boleh ada yang bernilai negatif" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Binary search membagi rentang pencarian menjadi dua bagian di nilai tengah, sehingga data wajib terurut terlebih dahulu."
+    },
+    {
+      "order_index": 36,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Algoritma pengurutan yang bekerja dengan membandingkan dua elemen berdampingan lalu menukarnya jika urutannya tidak tepat seperti gelembung yang naik ke permukaan disebut...",
+      "options": [
+        { "label": "A", "text": "Bubble Sort" },
+        { "label": "B", "text": "Selection Sort" },
+        { "label": "C", "text": "Insertion Sort" },
+        { "label": "D", "text": "Merge Sort" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Bubble Sort menggeser nilai terbesar/terkecil ke posisinya dengan menukar elemen yang bersebelahan."
+    },
+    {
+      "order_index": 37,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Algoritma pengurutan yang mencari elemen dengan nilai terkecil dari sisa array, lalu menukarkannya dengan elemen pada posisi pertama yang belum terurut disebut...",
+      "options": [
+        { "label": "A", "text": "Selection Sort" },
+        { "label": "B", "text": "Bubble Sort" },
+        { "label": "C", "text": "Linear Search" },
+        { "label": "D", "text": "Queue Sort" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Selection Sort memilih nilai minimum dan menaruhnya di indeks awal pada setiap putaran."
+    },
+    {
+      "order_index": 38,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Urutan daftar angka: [12, 25, 43, 67, 89] merupakan contoh dari pengurutan secara...",
+      "options": [
+        { "label": "A", "text": "Ascending (Menaik)" },
+        { "label": "B", "text": "Descending (Menurun)" },
+        { "label": "C", "text": "Randomized" },
+        { "label": "D", "text": "Inverted" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Ascending adalah urutan dari nilai terkecil menuju nilai terbesar."
+    },
+    {
+      "order_index": 39,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Tipe data yang digunakan khusus untuk merepresentasikan nilai kebenaran logika (True atau False) adalah...",
+      "options": [
+        { "label": "A", "text": "Boolean" },
+        { "label": "B", "text": "Integer" },
+        { "label": "C", "text": "String" },
+        { "label": "D", "text": "Float" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Boolean adalah tipe data biner logika yang hanya bernilai True (Benar) atau False (Salah)."
+    },
+    {
+      "order_index": 40,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Manakah nilai di bawah ini yang bertipe data Float (bilangan riil / pecahan desimal)?",
+      "options": [
+        { "label": "A", "text": "7.5" },
+        { "label": "B", "text": "100" },
+        { "label": "C", "text": "\"7.5\"" },
+        { "label": "D", "text": "False" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Nilai 7.5 memiliki tanda titik desimal sehingga tergolong tipe data Float."
+    },
+    {
+      "order_index": 41,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Manakah di antara pilihan penamaan variabel berikut yang VALID dan diperbolehkan dalam bahasa pemrograman seperti Python atau Java?",
+      "options": [
+        { "label": "A", "text": "nilai_rata_rata" },
+        { "label": "B", "text": "1nilai_siswa" },
+        { "label": "C", "text": "nilai rata rata" },
+        { "label": "D", "text": "nilai-siswa" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Nama variabel tidak boleh diawali angka, tidak boleh memiliki spasi, dan tidak boleh mengandung tanda minus (-). Variabel `nilai_rata_rata` valid karena menggunakan garis bawah (underscore)."
+    },
+    {
+      "order_index": 42,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Tipe data yang hanya dapat menampung satu karakter tunggal (seperti 'Z', '9', atau '?') disebut...",
+      "options": [
+        { "label": "A", "text": "Char (Character)" },
+        { "label": "B", "text": "String" },
+        { "label": "C", "text": "Array" },
+        { "label": "D", "text": "Boolean" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Char adalah tipe data untuk menyimpan satu karakter tunggal."
+    },
+    {
+      "order_index": 43,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Berapakah hasil dari operasi aritmatika `20 % 6` pada bahasa pemrograman Python atau C++?",
+      "options": [
+        { "label": "A", "text": "2" },
+        { "label": "B", "text": "3" },
+        { "label": "C", "text": "3.33" },
+        { "label": "D", "text": "0" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Operator % adalah Modulus (sisa bagi). 20 dibagi 6 menghasilkan 3 dengan sisa 2 (6 x 3 = 18; 20 - 18 = 2)."
+    },
+    {
+      "order_index": 44,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Jika variabel `p = True` dan `q = False`, berapakah hasil dari operasi logika `p AND q`?",
+      "options": [
+        { "label": "A", "text": "False" },
+        { "label": "B", "text": "True" },
+        { "label": "C", "text": "Error" },
+        { "label": "D", "text": "Null" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Operasi logika AND hanya menghasilkan True jika KEDUA operan bernilai True. Karena q bernilai False, maka hasilnya False."
+    },
+    {
+      "order_index": 45,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Jika variabel `p = True` dan `q = False`, berapakah hasil dari ekspresi logika `p OR q`?",
+      "options": [
+        { "label": "A", "text": "True" },
+        { "label": "B", "text": "False" },
+        { "label": "C", "text": "0" },
+        { "label": "D", "text": "Null" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Operasi logika OR menghasilkan True jika SALAH SATU atau kedua operan bernilai True."
+    },
+    {
+      "order_index": 46,
+      "type": "ESSAY",
+      "question_text": "Tuliskan nama tipe data yang digunakan untuk menyimpan sekumpulan karakter berupa teks kata atau kalimat (contoh: \"Kurikulum Merdeka\")!",
+      "options": [],
+      "correct_answer": "String; str; Tipe Data String; Teks",
+      "points": 100,
+      "explanation": "Tipe data String digunakan untuk menyimpan deretan karakter berupa teks atau kalimat."
+    },
+    {
+      "order_index": 47,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Apa perbedaan utama antara Variabel dan Konstanta dalam program?",
+      "options": [
+        { "label": "A", "text": "Nilai variabel dapat diubah selama program dieksekusi, sedangkan nilai konstanta bersifat tetap setelah didefinisikan" },
+        { "label": "B", "text": "Variabel hanya untuk angka bulat, sedangkan konstanta untuk pecahan" },
+        { "label": "C", "text": "Konstanta tidak dapat digunakan dalam operasi aritmatika" },
+        { "label": "D", "text": "Variabel tidak memerlukan tipe data sedangkan konstanta wajib" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Variabel memiliki nilai dinamis yang dapat berubah, sedangkan konstanta nilainya tetap (constant/immutable)."
+    },
+    {
+      "order_index": 48,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Proses konversi tipe data dari satu jenis ke jenis lain (misalnya mengubah angka 15 menjadi teks string \"15\") disebut...",
+      "options": [
+        { "label": "A", "text": "Type Casting" },
+        { "label": "B", "text": "Debugging" },
+        { "label": "C", "text": "Overriding" },
+        { "label": "D", "text": "Compilation" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Type casting (konversi tipe data) adalah mengubah representasi tipe data dari satu tipe ke tipe lainnya."
+    },
+    {
+      "order_index": 49,
+      "type": "MULTIPLE_CHOICE",
+      "question_text": "Operator relasional yang digunakan untuk membandingkan apakah dua nilai SAMA DENGAN dalam bahasa seperti Python, C, dan JavaScript adalah...",
+      "options": [
+        { "label": "A", "text": "==" },
+        { "label": "B", "text": "=" },
+        { "label": "C", "text": "!=" },
+        { "label": "D", "text": "<=" }
+      ],
+      "correct_answer": "A",
+      "points": 100,
+      "explanation": "Tanda '==' digunakan untuk perbandingan kesetaraan, sedangkan '=' digunakan untuk assignment (penugasan nilai)."
+    },
+    {
+      "order_index": 50,
+      "type": "ESSAY",
+      "question_text": "Tuliskan nama tipe data yang digunakan untuk menyimpan bilangan bulat (tanpa koma desimal), seperti angka 25, -10, atau 0!",
+      "options": [],
+      "correct_answer": "Integer; int; Bilangan Bulat",
+      "points": 100,
+      "explanation": "Integer (int) adalah tipe data bilangan bulat."
+    }
+  ]
+}
