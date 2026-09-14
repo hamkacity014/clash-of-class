@@ -449,21 +449,55 @@ export async function getRoomByCode(code: string): Promise<Room | null> {
 export async function getTeamsByRoomId(roomId: string): Promise<Team[]> {
   const localTeams = localStore.getTeams(roomId);
   if (isSupabaseConfigured && supabase) {
+    const sb = supabase;
     try {
-      const { data } = await supabase.from('teams').select('*').eq('room_id', roomId);
-      if (data && data.length > 0) return data as Team[];
+      const [{ data: teamsData }, { data: ptsData }] = await Promise.all([
+        sb.from('teams').select('*').eq('room_id', roomId),
+        sb.from('participants').select('team_id, score').eq('room_id', roomId),
+      ]);
+
+      if (teamsData && teamsData.length > 0) {
+        const teamScoreMap = new Map<string, number>();
+        if (ptsData) {
+          ptsData.forEach((p) => {
+            if (p.team_id) {
+              teamScoreMap.set(p.team_id, (teamScoreMap.get(p.team_id) || 0) + (p.score || 0));
+            }
+          });
+        }
+
+        const computedTeams: Team[] = (teamsData as Team[]).map((t) => {
+          const sumScore = teamScoreMap.get(t.id);
+          const effectiveScore = sumScore !== undefined ? Math.max(t.total_score || 0, sumScore) : (t.total_score || 0);
+
+          // Auto-heal tabel teams di Supabase jika total_score di database tertinggal
+          if (effectiveScore > (t.total_score || 0)) {
+            sb.from('teams').update({ total_score: effectiveScore }).eq('id', t.id).then();
+          }
+
+          return {
+            ...t,
+            total_score: effectiveScore,
+          };
+        });
+
+        localStore.saveTeams(roomId, computedTeams);
+        return computedTeams.sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
+      }
 
       // Auto-sync jika di Supabase belum ada
       if (localTeams.length > 0) {
-        const { data: rCheck } = await supabase.from('rooms').select('id').eq('id', roomId).maybeSingle();
+        const { data: rCheck } = await sb.from('rooms').select('id').eq('id', roomId).maybeSingle();
         if (rCheck) {
-          await supabase.from('teams').insert(localTeams);
+          await sb.from('teams').insert(localTeams);
         }
-        return localTeams;
+        return localTeams.sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
       }
-    } catch {}
+    } catch (err) {
+      console.warn('Supabase getTeamsByRoomId error:', err);
+    }
   }
-  return localTeams;
+  return localTeams.sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
 }
 
 export async function getParticipantsByRoomId(roomId: string): Promise<Participant[]> {
@@ -730,7 +764,16 @@ export async function startGame(roomId: string): Promise<RoomQuestion[]> {
 }
 
 export async function finishGame(roomId: string): Promise<Room | null> {
-  const room = localStore.getRoomById(roomId);
+  let room = localStore.getRoomById(roomId);
+  if (!room && isSupabaseConfigured && supabase) {
+    try {
+      const { data } = await supabase.from('rooms').select('*').eq('id', roomId).maybeSingle();
+      if (data) {
+        room = data as Room;
+        localStore.saveRoom(room);
+      }
+    } catch {}
+  }
   if (!room) return null;
 
   room.status = 'FINISHED';
@@ -1151,7 +1194,7 @@ export async function submitAnswer(
     localStore.updateParticipantScore(roomId, participant.id, points);
 
     // Tambah skor ke kelompok jika mode TEAM
-    if (room?.mode === 'TEAM' && participant.team_id) {
+    if (participant.team_id) {
       localStore.updateTeamScore(roomId, participant.team_id, points);
     }
 
@@ -1159,8 +1202,9 @@ export async function submitAnswer(
 
     // Update live status dan skor ke Supabase Cloud
     if (isSupabaseConfigured && supabase) {
+      const sb = supabase;
       try {
-        supabase
+        sb
           .from('room_questions')
           .update({
             status: 'SOLVED',
@@ -1171,24 +1215,32 @@ export async function submitAnswer(
           .then();
 
         const newScore = (participant.score || 0) + points;
-        supabase
+        participant.score = newScore;
+        sb
           .from('participants')
           .update({ score: newScore })
           .eq('id', participant.id)
           .then();
 
-        if (room?.mode === 'TEAM' && participant.team_id) {
-          const tms = localStore.getTeams(roomId);
-          const myTeam = tms.find((t) => t.id === participant.team_id);
-          if (myTeam) {
-            supabase
-              .from('teams')
-              .update({ total_score: myTeam.total_score })
-              .eq('id', participant.team_id)
-              .then();
-          }
+        if (participant.team_id) {
+          sb
+            .from('teams')
+            .select('total_score')
+            .eq('id', participant.team_id)
+            .maybeSingle()
+            .then(({ data: currentTeam }) => {
+              const currentTotal = currentTeam?.total_score || 0;
+              const updatedTeamScore = currentTotal + points;
+              return sb
+                .from('teams')
+                .update({ total_score: updatedTeamScore })
+                .eq('id', participant.team_id);
+            })
+            .then();
         }
-      } catch {}
+      } catch (err) {
+        console.warn('Supabase submitAnswer error:', err);
+      }
     }
 
     // Activity Log
