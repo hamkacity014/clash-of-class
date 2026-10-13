@@ -34,6 +34,239 @@ import {
   Home
 } from 'lucide-react';
 
+// =========================================================================
+// SUB-KOMPONEN TERISOLASI: MODAL PENGERJAAN SOAL (SOLVER WORKSPACE)
+// Timer 1 detik & input teks hanya me-re-render modal ini, BUKAN halaman induk!
+// =========================================================================
+const QuestionSolverModal = React.memo(function QuestionSolverModal({
+  activeQuestion,
+  isSubmitting,
+  feedback,
+  onSubmit,
+  onClose,
+  onTimeout,
+}: {
+  activeQuestion: RoomQuestion;
+  isSubmitting: boolean;
+  feedback: { type: 'success' | 'error' | 'info'; message: string } | null;
+  onSubmit: (answer: string) => Promise<void>;
+  onClose: () => void;
+  onTimeout: () => void;
+}) {
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(() => {
+    if (!activeQuestion.lock_expires_at) return 60;
+    const diff = Math.ceil((new Date(activeQuestion.lock_expires_at).getTime() - Date.now()) / 1000);
+    return Math.max(0, diff);
+  });
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!activeQuestion.lock_expires_at) return;
+
+    const updateTimer = () => {
+      const now = Date.now();
+      const exp = new Date(activeQuestion.lock_expires_at!).getTime();
+      const diff = Math.max(0, Math.ceil((exp - now) / 1000));
+      setRemainingSeconds(diff);
+
+      if (diff <= 10 && diff > 0) {
+        soundFx.playTick();
+      }
+
+      if (diff <= 0) {
+        if (timerRef.current) clearInterval(timerRef.current);
+        onTimeout();
+      }
+    };
+
+    updateTimer();
+    timerRef.current = setInterval(updateTimer, 1000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [activeQuestion.lock_expires_at, onTimeout]);
+
+  const q = activeQuestion.question!;
+  const isEssay = q.type === 'ESSAY' || !q.options || q.options.length === 0;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="w-full max-w-2xl bg-slate-900 border-2 border-amber-500/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-amber-500/20 relative overflow-hidden flex flex-col">
+        {/* Top Glowing Bar */}
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-rose-500 to-amber-500"></div>
+
+        {/* Modal Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-bold uppercase tracking-widest text-amber-400">
+                Kamu Sedang Mengunci:
+              </span>
+              <span
+                className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                  isEssay
+                    ? 'bg-purple-950/70 border-purple-500/50 text-purple-300 shadow-sm shadow-purple-500/20'
+                    : 'bg-cyan-950/70 border-cyan-500/50 text-cyan-300'
+                }`}
+              >
+                {isEssay ? '✍️ Essay / Isian Singkat' : '🔘 Pilihan Ganda'}
+              </span>
+            </div>
+            <h3 className="text-xl sm:text-2xl font-black text-white">
+              Soal #{q.order_index}
+            </h3>
+          </div>
+
+          {/* Radial / Box Timer */}
+          <div
+            className={`flex items-center gap-2 px-4 py-2 rounded-2xl border font-mono font-black text-lg transition-all ${
+              remainingSeconds <= 10
+                ? 'border-rose-500 bg-rose-950/40 text-rose-400 animate-pulse'
+                : remainingSeconds <= 25
+                ? 'border-amber-500 bg-amber-950/40 text-amber-400'
+                : 'border-emerald-500 bg-emerald-950/40 text-emerald-400'
+            }`}
+          >
+            <Clock className="w-5 h-5" />
+            <span>{remainingSeconds}s</span>
+          </div>
+        </div>
+
+        {/* Pertanyaan */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/80 border border-slate-800 mb-6">
+          <p className="text-base sm:text-lg font-semibold text-slate-100 leading-relaxed">
+            {q.question_text}
+          </p>
+        </div>
+
+        {/* Area Jawaban */}
+        {isEssay ? (
+          <div className="mb-6 space-y-2">
+            <label className="block text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+              <span>✍️ Tuliskan Jawaban Essay / Isian Singkat Kamu:</span>
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                autoFocus
+                value={selectedOption || ''}
+                onChange={(e) => setSelectedOption(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && selectedOption && selectedOption.trim() && !isSubmitting) {
+                    e.preventDefault();
+                    onSubmit(selectedOption);
+                  }
+                }}
+                placeholder="Ketik jawabanmu di sini... (tekan Enter untuk kirim)"
+                className="w-full px-4 py-3.5 rounded-xl bg-slate-950 border-2 border-purple-500/50 focus:border-purple-400 focus:outline-none focus:ring-4 focus:ring-purple-500/20 text-white font-medium text-base sm:text-lg placeholder:text-slate-600 transition-all shadow-inner"
+              />
+            </div>
+            <p className="text-[11px] text-slate-400 flex items-center gap-1">
+              <span>💡</span>
+              <span>Huruf besar/kecil tidak berpengaruh. Tekan <strong>Enter</strong> atau tombol di bawah untuk mengirim.</span>
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+            {q.options.map((opt) => {
+              const isSelected = selectedOption === opt.label;
+              return (
+                <button
+                  type="button"
+                  key={opt.label}
+                  onClick={() => {
+                    setSelectedOption(opt.label);
+                    soundFx.playClick();
+                  }}
+                  className={`p-4 rounded-xl border text-left transition-all flex items-start gap-3 ${
+                    isSelected
+                      ? 'border-cyan-400 bg-cyan-950/50 text-white shadow-md shadow-cyan-500/20'
+                      : 'border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-700 hover:text-white'
+                  }`}
+                >
+                  <span
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center font-mono font-bold text-xs shrink-0 ${
+                      isSelected
+                        ? 'bg-cyan-400 text-slate-950'
+                        : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {opt.label}
+                  </span>
+                  <span className="text-sm font-medium pt-0.5 leading-snug">
+                    {opt.text}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Feedback Alert */}
+        {feedback && feedback.type === 'success' && (
+          <div className="space-y-3 mb-4 animate-in zoom-in-95">
+            <div className="p-4 rounded-2xl border text-sm font-bold flex items-center gap-2 border-emerald-500 bg-emerald-950/60 text-emerald-300">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+              <span>{feedback.message}</span>
+            </div>
+
+            {q.explanation && (
+              <div className="p-4 rounded-xl bg-slate-950/90 border border-slate-800 text-xs text-slate-300 flex items-start gap-2.5">
+                <span className="text-base">💡</span>
+                <div>
+                  <span className="font-bold text-amber-400 block mb-1">Pembahasan Singkat:</span>
+                  <span className="leading-relaxed text-slate-200">{q.explanation}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="flex items-center justify-between gap-4 pt-2">
+          {feedback?.type === 'success' ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full px-8 py-3.5 rounded-xl font-black text-sm bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/25 active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <ArrowRight className="w-4 h-4" />
+              <span>TUTUP & KEMBALI KE ARENA SOAL</span>
+            </button>
+          ) : (
+            <>
+              <div className="text-xs text-slate-400 hidden sm:block">
+                Poin jika benar: <strong className="text-amber-400">+{q.points} PTS</strong>
+              </div>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto ml-auto">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-3.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all flex items-center gap-1.5"
+                >
+                  <span>Batal / Tutup</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={!selectedOption || !selectedOption.trim() || isSubmitting}
+                  onClick={() => selectedOption && onSubmit(selectedOption)}
+                  className="flex-1 sm:flex-initial px-8 py-3.5 rounded-xl font-black text-sm bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <span>KIRIM JAWABAN</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
 function StudentArenaContent() {
   const params = useParams();
   const router = useRouter();
@@ -47,21 +280,18 @@ function StudentArenaContent() {
   const [allParticipants, setAllParticipants] = useState<Participant[]>([]);
   const [roomQuestions, setRoomQuestions] = useState<RoomQuestion[]>([]);
   const [activeQuestion, setActiveQuestion] = useState<RoomQuestion | null>(null);
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const [remainingSeconds, setRemainingSeconds] = useState<number>(60);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const hasCelebratedRef = useRef(false);
 
-  // Show Toast
-  const showToast = (msg: string) => {
+  // Show Toast - Focus Guard: Pop-up dibisukan saat murid sedang mengerjakan soal
+  const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 4000);
-  };
+    setTimeout(() => setToastMsg(null), 3500);
+  }, []);
 
   // Muat data room, peserta, dan pertanyaan
   const loadArenaData = useCallback(async () => {
@@ -118,7 +348,6 @@ function StudentArenaContent() {
       const myLocked = rqList.find((rq) => {
         if (rq.status !== 'LOCKED' || !rq.lock_expires_at) return false;
         if (new Date(rq.lock_expires_at).getTime() <= Date.now()) return false;
-        // PENTING: Hanya peserta yang mengunci yang memiliki modal terbuka
         return rq.locked_by_participant_id === currentP?.id;
       });
 
@@ -130,7 +359,7 @@ function StudentArenaContent() {
           return myLocked;
         });
       } else {
-        // Jika bukan dia yang mengunci (misal dikunci tim lain), pastikan modal TERTUTUP!
+        // Jika bukan dia yang mengunci, modal tetap tertutup
         setActiveQuestion(null);
       }
     } else {
@@ -138,58 +367,13 @@ function StudentArenaContent() {
     }
   }, [code, pid]);
 
-  // Sync Timer Pengerjaan
-  useEffect(() => {
-    if (!activeQuestion || !activeQuestion.lock_expires_at) {
-      if (timerRef.current) clearInterval(timerRef.current);
-      return;
-    }
-
-    const updateTimer = () => {
-      const now = Date.now();
-      const exp = new Date(activeQuestion.lock_expires_at!).getTime();
-      const diff = Math.max(0, Math.ceil((exp - now) / 1000));
-      setRemainingSeconds(diff);
-
-      // Audio tick di 10 detik terakhir
-      if (diff <= 10 && diff > 0) {
-        soundFx.playTick();
-      }
-
-      // Waktu habis! (Fase 4 Anti-Troll Timeout Handler)
-      if (diff <= 0) {
-        if (timerRef.current) clearInterval(timerRef.current);
-        soundFx.playLock();
-        if (participant && activeQuestion) {
-          handleQuestionTimeout(activeQuestion.id, participant);
-        }
-        setActiveQuestion(null);
-        setSelectedOption(null);
-        showToast('Waktu habis! Soal lepas dan kamu terkena penalti 20 detik.');
-        loadArenaData();
-      }
-    };
-
-    updateTimer();
-    timerRef.current = setInterval(updateTimer, 1000);
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [activeQuestion, loadArenaData]);
-
-  // Real-time Event Subscription
+  // Real-time Event Subscription (Dengan In-Place Patching & Zero Toast Leak!)
   useEffect(() => {
     loadArenaData();
 
     const unsubscribe = subscribeToRoomEvents(code, (payload: RealtimeEventPayload) => {
-      // Refresh board kapan saja ada aksi lock, release, atau solve
-      loadArenaData();
-
       if (payload.event === 'GAME_FINISHED') {
         setActiveQuestion(null);
-        setSelectedOption(null);
-        if (timerRef.current) clearInterval(timerRef.current);
         soundFx.playSuccess();
         confetti({
           particleCount: 120,
@@ -199,27 +383,108 @@ function StudentArenaContent() {
         });
         setShowResultModal(true);
         loadArenaData();
-      } else if (payload.event === 'QUESTION_LOCKED') {
-        const locker = (payload.data?.lockedByName as string) || 'Seseorang';
-        showToast(`⚡ ${locker} baru saja mengunci salah satu soal!`);
+        return;
+      }
+
+      // IN-PLACE STATE PATCHING (Tanpa Fetch Ulang 4 Query ke Database!)
+      if (payload.event === 'QUESTION_LOCKED') {
+        const qId = payload.data?.roomQuestionId as string;
+        const locker = (payload.data?.lockedByName as string) || 'Peserta Lain';
+        const exp = (payload.data?.expiresAt as string) || null;
+        const teamId = payload.data?.teamId as string;
+        const pId = payload.data?.participantId as string;
+
+        setRoomQuestions((prev) =>
+          prev.map((rq) =>
+            rq.id === qId
+              ? {
+                  ...rq,
+                  status: 'LOCKED',
+                  locked_by_name: locker,
+                  locked_by_participant_id: pId,
+                  locked_by_team_id: teamId || null,
+                  lock_expires_at: exp,
+                }
+              : rq
+          )
+        );
+
+        // HANYA beri notifikasi jika itu REKAN SATU TIM di Mode Tim (Eliminasi bocor notif!)
+        if (room?.mode === 'TEAM' && teamId && teamId === participant?.team_id && pId !== participant?.id) {
+          showToast(`👥 Rekan kelompokmu (${locker}) sedang mengerjakan Soal #${payload.data?.orderIndex || ''}`);
+        }
       } else if (payload.event === 'QUESTION_RELEASED') {
-        showToast('🔓 Waktu soal habis! Soal kembali terbuka untuk diperebutkan.');
+        const qId = payload.data?.roomQuestionId as string;
+        setRoomQuestions((prev) =>
+          prev.map((rq) =>
+            rq.id === qId
+              ? {
+                  ...rq,
+                  status: 'AVAILABLE',
+                  locked_by_name: null,
+                  locked_by_participant_id: null,
+                  locked_by_team_id: null,
+                  lock_expires_at: null,
+                }
+              : rq
+          )
+        );
+        // TIDAK ADA TOAST untuk release orang lain agar tidak spam di HP siswa
       } else if (payload.event === 'QUESTION_SOLVED') {
+        const qId = payload.data?.roomQuestionId as string;
         const solver = (payload.data?.solvedByName as string) || 'Peserta';
         const pts = (payload.data?.pointsAwarded as number) || 100;
-        showToast(`🎉 ${solver} berhasil menjawab BENAR (+${pts} PTS)!`);
+        const teamId = payload.data?.teamId as string;
+
+        setRoomQuestions((prev) =>
+          prev.map((rq) =>
+            rq.id === qId
+              ? {
+                  ...rq,
+                  status: 'SOLVED',
+                  solved_by_name: solver,
+                  lock_expires_at: null,
+                }
+              : rq
+          )
+        );
+
+        // Jika rekan satu tim yang menjawab benar di Mode Tim:
+        if (room?.mode === 'TEAM' && teamId && teamId === participant?.team_id) {
+          showToast(`🎉 Kelompokmu (${solver}) berhasil menjawab BENAR (+${pts} PTS)!`);
+          soundFx.playSuccess();
+        }
       } else if (payload.event === 'FORCE_UNLOCKED') {
-        showToast('ℹ️ Guru membuka paksa salah satu soal.');
+        const qId = payload.data?.roomQuestionId as string;
+        setRoomQuestions((prev) =>
+          prev.map((rq) =>
+            rq.id === qId
+              ? {
+                  ...rq,
+                  status: 'AVAILABLE',
+                  locked_by_name: null,
+                  locked_by_participant_id: null,
+                  locked_by_team_id: null,
+                  lock_expires_at: null,
+                }
+              : rq
+          )
+        );
+        if (activeQuestion?.id === qId) {
+          setActiveQuestion(null);
+          showToast('ℹ️ Guru membuka paksa soal ini.');
+        }
       }
     });
 
-    const pollInterval = setInterval(loadArenaData, 2500);
+    // Polling latar belakang diperpanjang ke 12 detik sebagai fallback aman
+    const pollInterval = setInterval(loadArenaData, 12000);
 
     return () => {
       clearInterval(pollInterval);
       unsubscribe();
     };
-  }, [code, loadArenaData]);
+  }, [code, loadArenaData, participant, room?.mode, showToast, activeQuestion?.id]);
 
   // Efek selebrasi suara & confetti satu kali saat game selesai
   useEffect(() => {
@@ -248,11 +513,13 @@ function StudentArenaContent() {
 
     if (result.status === 'SUCCESS') {
       soundFx.playLock();
-      setActiveQuestion(rq);
-      setSelectedOption(null);
+      setActiveQuestion({
+        ...rq,
+        status: 'LOCKED',
+        locked_by_name: participant.name,
+        lock_expires_at: result.expires_at || null,
+      });
       setFeedback(null);
-      setRemainingSeconds(room.lock_duration || 60);
-      loadArenaData();
     } else {
       soundFx.playLock();
       showToast(`⚠️ ${result.message}`);
@@ -260,11 +527,9 @@ function StudentArenaContent() {
     }
   };
 
-  // Handler: Kirim Jawaban
-  const handleSubmitAnswer = async () => {
+  // Handler: Kirim Jawaban (Dipanggil dari QuestionSolverModal)
+  const handleSubmitAnswer = async (selectedOption: string) => {
     if (!activeQuestion || !participant || !selectedOption || !selectedOption.trim()) {
-      const isEssay = activeQuestion?.question?.type === 'ESSAY' || !activeQuestion?.question?.options || activeQuestion.question.options.length === 0;
-      alert(isEssay ? 'Tuliskan jawaban essay terlebih dahulu!' : 'Pilih salah satu jawaban terlebih dahulu!');
       return;
     }
 
@@ -274,7 +539,6 @@ function StudentArenaContent() {
 
       if (res.correct) {
         soundFx.playSuccess();
-        // Efek Confetti Ledakan Kemenangan
         confetti({
           particleCount: 80,
           spread: 70,
@@ -292,22 +556,39 @@ function StudentArenaContent() {
           setParticipant({ ...participant, score: (participant.score || 0) + res.pointsAwarded });
         }
 
-        // Sinkronisasi data latar belakang (modal tetap dibuka agar siswa leluasa membaca pembahasan)
-        loadArenaData();
+        // In-place mark solved
+        setRoomQuestions((prev) =>
+          prev.map((rq) => rq.id === activeQuestion.id ? { ...rq, status: 'SOLVED', solved_by_name: participant.name } : rq)
+        );
       } else {
         soundFx.playLock();
-        // Jawaban salah: langsung tutup modal pengerjaan dan kembali ke bank soal arena tanpa membocorkan kunci jawaban
         setActiveQuestion(null);
-        setSelectedOption(null);
         setFeedback(null);
         showToast('❌ Jawaban Kurang Tepat! Soal lepas dan dapat direbut lawan.');
-        loadArenaData();
+        setRoomQuestions((prev) =>
+          prev.map((rq) => rq.id === activeQuestion.id ? { ...rq, status: 'AVAILABLE', locked_by_name: null } : rq)
+        );
       }
     } catch {
       alert('Gagal mengirim jawaban. Coba lagi.');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Handler: Waktu Pengerjaan Habis
+  const handleQuestionTimeoutHandler = () => {
+    soundFx.playLock();
+    if (participant && activeQuestion) {
+      handleQuestionTimeout(activeQuestion.id, participant);
+    }
+    const timedOutId = activeQuestion?.id;
+    setActiveQuestion(null);
+    setFeedback(null);
+    showToast('Waktu habis! Soal lepas dan kamu terkena penalti 20 detik.');
+    setRoomQuestions((prev) =>
+      prev.map((rq) => rq.id === timedOutId ? { ...rq, status: 'AVAILABLE', locked_by_name: null } : rq)
+    );
   };
 
   if (!room) {
@@ -342,8 +623,8 @@ function StudentArenaContent() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col select-none">
       <Navbar hideHostBtn={true} />
 
-      {/* Floating Toast Notification */}
-      {toastMsg && (
+      {/* Floating Toast Notification - HANYA muncul jika murid TIDAK sedang dalam modal pengerjaan */}
+      {toastMsg && !activeQuestion && (
         <div className="fixed top-20 right-4 z-50 animate-in slide-in-from-top-4 fade-in duration-300">
           <div className="bg-slate-900/95 border border-cyan-500/50 shadow-2xl shadow-cyan-500/20 px-4 py-3 rounded-xl text-xs font-semibold text-white flex items-center gap-2 backdrop-blur-md">
             <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
@@ -615,191 +896,18 @@ function StudentArenaContent() {
       {/* MODAL PENGERJAAN SOAL (SOLVER WORKSPACE) - HANYA UNTUK SISWA PENGUNCI     */}
       {/* ========================================================================= */}
       {activeQuestion && activeQuestion.question && (
-        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-2xl bg-slate-900 border-2 border-amber-500/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-amber-500/20 relative overflow-hidden flex flex-col">
-            {/* Top Glowing Bar */}
-            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-rose-500 to-amber-500"></div>
-
-            {/* Modal Header: Nomor Soal, Badge Tipe, Timer Melingkar, & Nilai Poin */}
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-bold uppercase tracking-widest text-amber-400">
-                    Kamu Sedang Mengunci:
-                  </span>
-                  <span
-                    className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
-                      activeQuestion.question.type === 'ESSAY' || !activeQuestion.question.options || activeQuestion.question.options.length === 0
-                        ? 'bg-purple-950/70 border-purple-500/50 text-purple-300 shadow-sm shadow-purple-500/20'
-                        : 'bg-cyan-950/70 border-cyan-500/50 text-cyan-300'
-                    }`}
-                  >
-                    {activeQuestion.question.type === 'ESSAY' || !activeQuestion.question.options || activeQuestion.question.options.length === 0
-                      ? '✍️ Essay / Isian Singkat'
-                      : '🔘 Pilihan Ganda'}
-                  </span>
-                </div>
-                <h3 className="text-xl sm:text-2xl font-black text-white">
-                  Soal #{activeQuestion.question.order_index}
-                </h3>
-              </div>
-
-              {/* Radial / Box Timer 60 Detik */}
-              <div
-                className={`flex items-center gap-2 px-4 py-2 rounded-2xl border font-mono font-black text-lg transition-all ${
-                  remainingSeconds <= 10
-                    ? 'border-rose-500 bg-rose-950/40 text-rose-400 animate-pulse'
-                    : remainingSeconds <= 25
-                    ? 'border-amber-500 bg-amber-950/40 text-amber-400'
-                    : 'border-emerald-500 bg-emerald-950/40 text-emerald-400'
-                }`}
-              >
-                <Clock className="w-5 h-5" />
-                <span>{remainingSeconds}s</span>
-              </div>
-            </div>
-
-            {/* Pertanyaan */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/80 border border-slate-800 mb-6">
-              <p className="text-base sm:text-lg font-semibold text-slate-100 leading-relaxed">
-                {activeQuestion.question.question_text}
-              </p>
-            </div>
-
-            {/* Area Jawaban: Essay Teks vs Pilihan Ganda (A, B, C, D) */}
-            {activeQuestion.question.type === 'ESSAY' || !activeQuestion.question.options || activeQuestion.question.options.length === 0 ? (
-              <div className="mb-6 space-y-2">
-                <label className="block text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <span>✍️ Tuliskan Jawaban Essay / Isian Singkat Kamu:</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    autoFocus
-                    value={selectedOption || ''}
-                    onChange={(e) => setSelectedOption(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && selectedOption && selectedOption.trim() && !isSubmitting) {
-                        e.preventDefault();
-                        handleSubmitAnswer();
-                      }
-                    }}
-                    placeholder="Ketik jawabanmu di sini... (tekan Enter untuk kirim)"
-                    className="w-full px-4 py-3.5 rounded-xl bg-slate-950 border-2 border-purple-500/50 focus:border-purple-400 focus:outline-none focus:ring-4 focus:ring-purple-500/20 text-white font-medium text-base sm:text-lg placeholder:text-slate-600 transition-all shadow-inner"
-                  />
-                </div>
-                <p className="text-[11px] text-slate-400 flex items-center gap-1">
-                  <span>💡</span>
-                  <span>Huruf besar/kecil tidak berpengaruh. Tekan <strong>Enter</strong> atau tombol di bawah untuk mengirim.</span>
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-                {activeQuestion.question.options.map((opt) => {
-                  const isSelected = selectedOption === opt.label;
-                  return (
-                    <button
-                      type="button"
-                      key={opt.label}
-                      onClick={() => {
-                        setSelectedOption(opt.label);
-                        soundFx.playClick();
-                      }}
-                      className={`p-4 rounded-xl border text-left transition-all flex items-start gap-3 ${
-                        isSelected
-                          ? 'border-cyan-400 bg-cyan-950/50 text-white shadow-md shadow-cyan-500/20'
-                          : 'border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-700 hover:text-white'
-                      }`}
-                    >
-                      <span
-                        className={`w-7 h-7 rounded-lg flex items-center justify-center font-mono font-bold text-xs shrink-0 ${
-                          isSelected
-                            ? 'bg-cyan-400 text-slate-950'
-                            : 'bg-slate-800 text-slate-400'
-                        }`}
-                      >
-                        {opt.label}
-                      </span>
-                      <span className="text-sm font-medium pt-0.5 leading-snug">
-                        {opt.text}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Feedback Alert (Hanya saat jawaban Benar) */}
-            {feedback && feedback.type === 'success' && (
-              <div className="space-y-3 mb-4 animate-in zoom-in-95">
-                <div className="p-4 rounded-2xl border text-sm font-bold flex items-center gap-2 border-emerald-500 bg-emerald-950/60 text-emerald-300">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                  <span>{feedback.message}</span>
-                </div>
-
-                {/* Pembahasan Edukatif Soal */}
-                {activeQuestion.question.explanation && (
-                  <div className="p-4 rounded-xl bg-slate-950/90 border border-slate-800 text-xs text-slate-300 flex items-start gap-2.5">
-                    <span className="text-base">💡</span>
-                    <div>
-                      <span className="font-bold text-amber-400 block mb-1">Pembahasan Singkat:</span>
-                      <span className="leading-relaxed text-slate-200">{activeQuestion.question.explanation}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex items-center justify-between gap-4 pt-2">
-              {feedback?.type === 'success' ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveQuestion(null);
-                    setSelectedOption(null);
-                    setFeedback(null);
-                    loadArenaData();
-                  }}
-                  className="w-full px-8 py-3.5 rounded-xl font-black text-sm bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/25 active:scale-95 transition-all flex items-center justify-center gap-2"
-                >
-                  <ArrowRight className="w-4 h-4" />
-                  <span>TUTUP & KEMBALI KE ARENA SOAL</span>
-                </button>
-              ) : (
-                <>
-                  <div className="text-xs text-slate-400 hidden sm:block">
-                    Poin jika benar: <strong className="text-amber-400">+{activeQuestion.question.points} PTS</strong>
-                  </div>
-
-                  <div className="flex items-center gap-3 w-full sm:w-auto ml-auto">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveQuestion(null);
-                        setSelectedOption(null);
-                        setFeedback(null);
-                      }}
-                      className="px-4 py-3.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all flex items-center gap-1.5"
-                    >
-                      <span>Batal / Tutup</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={!selectedOption || !selectedOption.trim() || isSubmitting}
-                      onClick={handleSubmitAnswer}
-                      className="flex-1 sm:flex-initial px-8 py-3.5 rounded-xl font-black text-sm bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <span>KIRIM JAWABAN</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+        <QuestionSolverModal
+          activeQuestion={activeQuestion}
+          isSubmitting={isSubmitting}
+          feedback={feedback}
+          onSubmit={handleSubmitAnswer}
+          onClose={() => {
+            setActiveQuestion(null);
+            setFeedback(null);
+            loadArenaData();
+          }}
+          onTimeout={handleQuestionTimeoutHandler}
+        />
       )}
 
       {/* ========================================================================= */}

@@ -35,6 +35,7 @@ export function generateRoomCode(): string {
 // BROADCAST / REAL-TIME EVENT BUS (MULTI-TAB & SUPABASE)
 // -------------------------------------------------------------
 const broadcastChannels: Record<string, BroadcastChannel> = {};
+const supabaseChannels: Record<string, ReturnType<NonNullable<typeof supabase>['channel']>> = {};
 
 function getBroadcastChannel(code: string): BroadcastChannel | null {
   if (typeof window === 'undefined') return null;
@@ -49,6 +50,15 @@ function getBroadcastChannel(code: string): BroadcastChannel | null {
   return broadcastChannels[channelName];
 }
 
+function getSupabaseRealtimeChannel(code: string) {
+  if (!supabase) return null;
+  const channelKey = `room:${code.toUpperCase()}`;
+  if (!supabaseChannels[channelKey]) {
+    supabaseChannels[channelKey] = supabase.channel(channelKey);
+  }
+  return supabaseChannels[channelKey];
+}
+
 export function broadcastRoomEvent(payload: RealtimeEventPayload) {
   // 1. Broadcast via Web BroadcastChannel (Instan multi-tab di browser)
   const bc = getBroadcastChannel(payload.room_code);
@@ -59,12 +69,14 @@ export function broadcastRoomEvent(payload: RealtimeEventPayload) {
   // 2. Broadcast via Supabase Realtime jika terhubung ke cloud
   if (isSupabaseConfigured && supabase) {
     try {
-      const channel = supabase.channel(`room:${payload.room_code.toUpperCase()}`);
-      channel.send({
-        type: 'broadcast',
-        event: payload.event,
-        payload,
-      });
+      const channel = getSupabaseRealtimeChannel(payload.room_code);
+      if (channel) {
+        channel.send({
+          type: 'broadcast',
+          event: payload.event,
+          payload,
+        });
+      }
     } catch {}
   }
 }
@@ -92,16 +104,14 @@ export function subscribeToRoomEvents(
   // 2. Dengar event dari Supabase Realtime
   if (isSupabaseConfigured && supabase) {
     try {
-      const channel = supabase.channel(`room:${code.toUpperCase()}`);
-      channel
-        .on('broadcast', { event: '*' }, ({ payload }) => {
-          callback(payload as RealtimeEventPayload);
-        })
-        .subscribe();
-
-      cleanups.push(() => {
-        supabase?.removeChannel(channel);
-      });
+      const channel = getSupabaseRealtimeChannel(code);
+      if (channel) {
+        channel
+          .on('broadcast', { event: '*' }, ({ payload }) => {
+            callback(payload as RealtimeEventPayload);
+          })
+          .subscribe();
+      }
     } catch {}
   }
 
@@ -1103,25 +1113,51 @@ export async function attemptLockQuestion(
   targetRq.locked_at = new Date().toISOString();
   targetRq.lock_expires_at = expiresAt;
 
-  localStore.saveRoomQuestions(roomId, rqList);
-
-  // Sinkronkan update status locked ke Supabase Cloud
+  // 5. Eksekusi Atomic Stored Procedure di Supabase jika terhubung ke cloud
+  let actualExpiresAt = expiresAt;
   if (isSupabaseConfigured && supabase) {
     try {
-      supabase
-        .from('room_questions')
-        .update({
-          status: 'LOCKED',
-          locked_by_participant_id: participant.id,
-          locked_by_team_id: participant.team_id || null,
-          locked_by_name: targetRq.locked_by_name,
-          locked_at: targetRq.locked_at,
-          lock_expires_at: expiresAt,
-        })
-        .eq('id', roomQuestionId)
-        .then();
-    } catch {}
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('claim_question_lock', {
+        p_room_question_id: roomQuestionId,
+        p_participant_id: participant.id,
+        p_team_id: participant.team_id || null,
+        p_participant_name: targetRq.locked_by_name,
+        p_lock_duration_seconds: durationSeconds,
+      });
+
+      if (!rpcErr && rpcRes) {
+        if (!rpcRes.success) {
+          return {
+            status: 'ALREADY_LOCKED',
+            message: rpcRes.message || 'Soal sudah dikunci oleh peserta lain!',
+          };
+        }
+        if (rpcRes.expires_at) {
+          actualExpiresAt = rpcRes.expires_at;
+          targetRq.lock_expires_at = actualExpiresAt;
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ claim_question_lock RPC warning, fallback to direct update:', err);
+      // Fallback update jika RPC belum dibuat di Supabase
+      try {
+        supabase
+          .from('room_questions')
+          .update({
+            status: 'LOCKED',
+            locked_by_participant_id: participant.id,
+            locked_by_team_id: participant.team_id || null,
+            locked_by_name: targetRq.locked_by_name,
+            locked_at: targetRq.locked_at,
+            lock_expires_at: actualExpiresAt,
+          })
+          .eq('id', roomQuestionId)
+          .then();
+      } catch {}
+    }
   }
+
+  localStore.saveRoomQuestions(roomId, rqList);
 
   // Catat log
   localStore.addActivityLog(roomId, {
@@ -1131,7 +1167,7 @@ export async function attemptLockQuestion(
     timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
   });
 
-  // Broadcast ke seluruh murid & guru
+  // Broadcast ke seluruh murid & guru dengan payload lengkap untuk in-place patching
   broadcastRoomEvent({
     event: 'QUESTION_LOCKED',
     room_code: room.code,
@@ -1140,14 +1176,17 @@ export async function attemptLockQuestion(
     data: {
       roomQuestionId,
       lockedByName: targetRq.locked_by_name,
-      expiresAt,
+      participantId: participant.id,
+      teamId: participant.team_id || null,
+      orderIndex: targetRq.question?.order_index || '',
+      expiresAt: actualExpiresAt,
     },
   });
 
     return {
       status: 'SUCCESS',
       message: 'Berhasil mengunci soal! Kerjakan dalam waktu 60 detik.',
-      expires_at: expiresAt,
+      expires_at: actualExpiresAt,
     };
   });
 }
@@ -1184,6 +1223,29 @@ export async function submitAnswer(
   const points = targetRq.question.points || 100;
   const displayName = room?.mode === 'TEAM' && participant.team_name ? participant.team_name : participant.name;
 
+  // 1. Eksekusi RPC atomik Supabase jika terhubung ke cloud
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('submit_answer_atomic', {
+        p_room_question_id: roomQuestionId,
+        p_participant_id: participant.id,
+        p_team_id: participant.team_id || null,
+        p_selected_answer: selectedAnswer,
+        p_solver_name: displayName,
+      });
+
+      if (!rpcErr && rpcRes) {
+        if (rpcRes.correct) {
+          isCorrect = true;
+        } else {
+          isCorrect = false;
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ submit_answer_atomic RPC warning, fallback to direct scoring:', err);
+    }
+  }
+
   if (isCorrect) {
     // JAWABAN BENAR!
     targetRq.status = 'SOLVED';
@@ -1200,46 +1262,28 @@ export async function submitAnswer(
 
     localStore.saveRoomQuestions(roomId, rqList);
 
-    // Update live status dan skor ke Supabase Cloud
+    // Fallback sync langsung ke Supabase Cloud jika RPC tidak berjalan
     if (isSupabaseConfigured && supabase) {
       const sb = supabase;
       try {
-        sb
-          .from('room_questions')
-          .update({
-            status: 'SOLVED',
-            solved_by_name: displayName,
-            lock_expires_at: null,
-          })
-          .eq('id', roomQuestionId)
-          .then();
+        sb.from('room_questions').update({
+          status: 'SOLVED',
+          solved_by_name: displayName,
+          lock_expires_at: null,
+        }).eq('id', roomQuestionId).then();
 
         const newScore = (participant.score || 0) + points;
         participant.score = newScore;
-        sb
-          .from('participants')
-          .update({ score: newScore })
-          .eq('id', participant.id)
-          .then();
+        sb.from('participants').update({ score: newScore }).eq('id', participant.id).then();
 
         if (participant.team_id) {
-          sb
-            .from('teams')
-            .select('total_score')
-            .eq('id', participant.team_id)
-            .maybeSingle()
-            .then(({ data: currentTeam }) => {
-              const currentTotal = currentTeam?.total_score || 0;
-              const updatedTeamScore = currentTotal + points;
-              return sb
-                .from('teams')
-                .update({ total_score: updatedTeamScore })
-                .eq('id', participant.team_id);
-            })
-            .then();
+          sb.from('teams').select('total_score').eq('id', participant.team_id).maybeSingle().then(({ data: currentTeam }) => {
+            const currentTotal = currentTeam?.total_score || 0;
+            return sb.from('teams').update({ total_score: currentTotal + points }).eq('id', participant.team_id);
+          }).then();
         }
       } catch (err) {
-        console.warn('Supabase submitAnswer error:', err);
+        console.warn('Supabase submitAnswer direct sync:', err);
       }
     }
 
@@ -1251,7 +1295,7 @@ export async function submitAnswer(
       timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
     });
 
-    // Broadcast
+    // Broadcast dengan payload lengkap untuk in-place patching di sisi murid
     if (room) {
       broadcastRoomEvent({
         event: 'QUESTION_SOLVED',
@@ -1261,6 +1305,9 @@ export async function submitAnswer(
         data: {
           roomQuestionId,
           solvedByName: displayName,
+          participantId: participant.id,
+          teamId: participant.team_id || null,
+          orderIndex: targetRq.question.order_index,
           pointsAwarded: points,
         },
       });
@@ -1314,6 +1361,9 @@ export async function submitAnswer(
         data: { 
           roomQuestionId,
           reason: 'WRONG_ANSWER',
+          participantId: participant.id,
+          teamId: participant.team_id || null,
+          orderIndex: targetRq.question.order_index,
           message: `${displayName} menjawab salah. Soal kembali terbuka!`
         },
       });

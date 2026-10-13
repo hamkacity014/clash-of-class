@@ -70,9 +70,17 @@ export default function HostArenaPage() {
   useEffect(() => {
     loadData();
 
+    let debounceTimer: NodeJS.Timeout | null = null;
+    const debouncedLoadData = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        loadData();
+      }, 400);
+    };
+
     // Dengar event broadcast
     const unsubscribe = subscribeToRoomEvents(code, (payload: RealtimeEventPayload) => {
-      loadData();
+      debouncedLoadData();
       if (payload.event === 'QUESTION_LOCKED') {
         soundFx.playLock();
       } else if (payload.event === 'QUESTION_SOLVED') {
@@ -80,9 +88,10 @@ export default function HostArenaPage() {
       }
     });
 
-    const interval = setInterval(loadData, 2000);
+    const interval = setInterval(loadData, 5000);
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       clearInterval(interval);
       unsubscribe();
     };
